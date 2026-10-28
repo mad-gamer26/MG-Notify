@@ -1457,13 +1457,25 @@ final class MGNotifyModel: NSObject, ObservableObject {
             return
         }
 
-        try? fileManager.createDirectory(at: sharedSoundsDirectory, withIntermediateDirectories: true)
-        for legacySoundURL in legacySoundURLs where !legacySoundURL.hasDirectoryPath {
-            let destinationURL = sharedSoundsDirectory.appending(path: legacySoundURL.lastPathComponent)
-            guard !fileManager.fileExists(atPath: destinationURL.path) else {
-                continue
+        // Sounds used to live in the app's own Library/Sounds. They're copied
+        // across only when the shared folder doesn't exist yet (the first
+        // launch after moving); after that the old folder holds only stale
+        // copies, and copying "missing" ones would bring back deleted sounds.
+        // So it's removed once its sounds are safe in the shared folder.
+        var copyFailed = false
+        if !fileManager.fileExists(atPath: sharedSoundsDirectory.path) {
+            try? fileManager.createDirectory(at: sharedSoundsDirectory, withIntermediateDirectories: true)
+            for legacySoundURL in legacySoundURLs where !legacySoundURL.hasDirectoryPath {
+                let destinationURL = sharedSoundsDirectory.appending(path: legacySoundURL.lastPathComponent)
+                do {
+                    try fileManager.copyItem(at: legacySoundURL, to: destinationURL)
+                } catch {
+                    copyFailed = true
+                }
             }
-            try? fileManager.copyItem(at: legacySoundURL, to: destinationURL)
+        }
+        if !copyFailed {
+            try? fileManager.removeItem(at: legacySoundsDirectory)
         }
     }
 
