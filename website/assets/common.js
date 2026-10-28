@@ -197,8 +197,6 @@ const MG = (() => {
         const signedIn = Boolean(token());
         for (const link of document.querySelectorAll("[data-when-signed-in]")) link.hidden = !signedIn;
         for (const link of document.querySelectorAll("[data-when-signed-out]")) link.hidden = signedIn;
-        const year = document.getElementById("year");
-        if (year) year.textContent = new Date().getFullYear();
     }
 
     /**

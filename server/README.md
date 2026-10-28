@@ -184,7 +184,10 @@ TLS. `deploy/` has the nginx configuration used for notify.mad-gamer.com:
 - `notify-nginx-block.conf`: the server block. It serves `website/` as static
   files and proxies `/api/` to the server.
 - `mg-notify-site.conf`: the website's security headers (including its
-  Content-Security-Policy) and the caching rules.
+  Content-Security-Policy) and the caching rules. It also turns on nginx's
+  server-side includes, which fill in the year in each page's copyright
+  footer (`<!--# echo var="date_local" -->`); served without them, the pages
+  show that tag instead of a year.
 - `mg-notify-smtp.conf`: an nginx `stream` server that passes public port 25
   to the SMTP receiver, so the server doesn't need to run as root.
 - `mg-notify-cert.sh`: a certbot deploy hook that copies the certificate to
