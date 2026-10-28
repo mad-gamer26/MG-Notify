@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MG Notify: push notifications from anything</title>
+    <meta name="description" content="Send push notifications to your iPhone, Android phone and browser from scripts, programs, servers and email, with one web address.">
+    <link rel="icon" href="/assets/favicon.png">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/site.css">
+    <script src="/assets/home.js"></script>
+    <script src="/assets/common.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+    <div class="inner">
+        <a class="brand" href="/"><img src="/assets/icon-192.png" alt=""> MG Notify</a>
+        <nav class="site-nav" aria-label="Site">
+            <ul>
+                <li><a href="/" aria-current="page">Home</a></li>
+                <li><a href="/docs.html">Documentation</a></li>
+                <li data-when-signed-in hidden><a href="/app.html">Dashboard</a></li>
+                <li data-when-signed-out><a href="/signin.html">Sign in</a></li>
+            </ul>
+        </nav>
+    </div>
+</header>
+
+<main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+        <div>
+            <h1 id="hero-title">Push notifications from anything</h1>
+            <p class="lead">MG Notify sends a notification to your phone, tablet or browser whenever a script, program, server or email asks it to. All it takes is one web address.</p>
+            <div class="actions">
+                <a class="button" href="/signin.html?mode=register" data-when-signed-out>Create a free account</a>
+                <a class="button" href="/app.html" data-when-signed-in hidden>Open your dashboard</a>
+                <a class="button secondary" href="/docs.html">Read the documentation</a>
+            </div>
+        </div>
+        <img src="/assets/icon-512.png" alt="">
+    </section>
+
+    <h2>How it works</h2>
+    <ol class="steps">
+        <li><strong>Create an account</strong> here or in the app, and verify your email address.</li>
+        <li><strong>Sign in on your devices.</strong> Use the MG Notify app on iPhone or Android, or turn on notifications in this browser.</li>
+        <li><strong>Create an API key</strong> in your dashboard or the app.</li>
+        <li><strong>Send.</strong> Open a link like <code>https://notify.mad-gamer.com/api/notify?key=YOUR_KEY&amp;msg=Hello</code> from anything that can make a web request, or email <code>YOUR_KEY@notify.mad-gamer.com</code>. Every device you're signed in on gets it.</li>
+    </ol>
+
+    <h2>What you can do</h2>
+    <div class="grid">
+        <section class="card" aria-labelledby="f-anywhere">
+            <h3 id="f-anywhere">Notify from anywhere</h3>
+            <p>Shell scripts, cron jobs, home automation, game servers, build pipelines and spreadsheets: if it can fetch a web address, it can notify you.</p>
+        </section>
+        <section class="card" aria-labelledby="f-email">
+            <h3 id="f-email">Email to notification</h3>
+            <p>Send or forward an email to your key's address and it arrives as a notification, with the full email one tap away.</p>
+        </section>
+        <section class="card" aria-labelledby="f-devices">
+            <h3 id="f-devices">All your devices</h3>
+            <p>iPhone, Android and any modern browser. Sign in to several accounts on one device, and choose your own notification sound.</p>
+        </section>
+        <section class="card" aria-labelledby="f-access">
+            <h3 id="f-access">Built for everyone</h3>
+            <p>The apps and this site are designed to work with screen readers, keyboards, braille displays and large text from the start.</p>
+        </section>
+    </div>
+
+    <h2>Get MG Notify</h2>
+    <ul>
+        <li><strong>iPhone and iPad:</strong> search for MG Notify in the App Store.</li>
+        <li><strong>Android:</strong> <a href="/downloads/mg-notify-latest.apk">download MG Notify for Android</a> (version 2.0, 10 MB; Android 8 or later). <a href="/docs.html#android-install">How to install it</a>.</li>
+        <li><strong>Any browser:</strong> <a href="/signin.html">sign in</a>, then turn on browser notifications in your dashboard.</li>
+    </ul>
+</main>
+
+<footer class="site-footer">
+    <div class="inner">
+        <span>&copy; <span id="year">2026</span> MG Notify</span><span>Version 2.0</span>
+        <a href="/docs.html">Documentation</a>
+        <a href="/docs.html#privacy">Privacy</a>
+        <a href="mailto:mattdovi@icloud.com">Contact</a>
+    </div>
+</footer>
+<div id="status-region" class="visually-hidden" role="status" aria-live="polite"></div>
+<div id="alert-region" class="visually-hidden" role="alert" aria-live="assertive"></div>
+</body>
+</html>

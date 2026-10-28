@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Choose a new password – MG Notify</title>
+    <link rel="icon" href="/assets/favicon.png">
+    <link rel="stylesheet" href="/assets/site.css">
+    <script src="/assets/common.js" defer></script>
+    <script src="/assets/auth.js" defer></script>
+</head>
+<body data-page="reset">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+    <div class="inner">
+        <a class="brand" href="/"><img src="/assets/icon-192.png" alt=""> MG Notify</a>
+        <nav class="site-nav" aria-label="Site">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/docs.html">Documentation</a></li>
+                <li><a href="/signin.html">Sign in</a></li>
+            </ul>
+        </nav>
+    </div>
+</header>
+<main id="main" class="narrow">
+    <h1>Choose a new password</h1>
+    <div class="card">
+        <div id="reset-message" class="message" role="alert"></div>
+        <form id="reset-form" novalidate>
+            <input type="text" name="username" autocomplete="username" hidden>
+            <div class="field">
+                <label for="new-password">New password</label>
+                <input id="new-password" type="password" autocomplete="new-password" required aria-describedby="new-password-hint">
+                <span class="hint" id="new-password-hint">At least 8 characters. Signing in again is needed on all your devices afterwards.</span>
+            </div>
+            <label class="check"><input type="checkbox" id="show-password"> Show password</label>
+            <button class="button wide" type="submit">Save new password</button>
+        </form>
+        <p id="reset-done" hidden><a class="button wide" href="/signin.html">Sign in</a></p>
+    </div>
+</main>
+<footer class="site-footer"><div class="inner"><span>&copy; <span id="year">2026</span> MG Notify</span><span>Version 2.0</span><a href="/docs.html">Documentation</a></div></footer>
+<div id="status-region" class="visually-hidden" role="status" aria-live="polite"></div>
+<div id="alert-region" class="visually-hidden" role="alert" aria-live="assertive"></div>
+</body>
+</html>

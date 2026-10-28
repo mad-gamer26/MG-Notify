@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard – MG Notify</title>
+    <link rel="icon" href="/assets/favicon.png">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/site.css">
+    <script src="/assets/common.js" defer></script>
+    <script src="/assets/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+    <div class="inner">
+        <a class="brand" href="/"><img src="/assets/icon-192.png" alt=""> MG Notify</a>
+        <nav class="site-nav" aria-label="Site">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/docs.html">Documentation</a></li>
+                <li><a href="/app.html" aria-current="page">Dashboard</a></li>
+            </ul>
+        </nav>
+    </div>
+</header>
+
+<main id="main">
+    <p id="loading" role="status">Loading your account…</p>
+
+    <section id="unreachable" hidden aria-labelledby="unreachable-title">
+        <h1 id="unreachable-title" tabindex="-1">Server unreachable</h1>
+        <div class="card">
+            <p>MG Notify could not reach the server. Please try again.</p>
+            <button class="button" type="button" id="retry">Try again</button>
+        </div>
+    </section>
+
+    <section id="verify-required" hidden aria-labelledby="verify-required-title">
+        <h1 id="verify-required-title" tabindex="-1">Verify your email</h1>
+        <div class="card">
+            <p>You need to verify your email in order to use MG Notify.</p>
+            <p>Check the inbox for <strong class="account-email"></strong> and follow the verification link.</p>
+            <div id="verify-required-message" class="message" role="status"></div>
+            <div class="actions">
+                <button class="button" type="button" id="resend-verification">Resend verification email</button>
+                <button class="button secondary" type="button" id="check-verification">I've verified it</button>
+                <button class="button danger" type="button" data-sign-out>Sign out</button>
+            </div>
+        </div>
+    </section>
+
+    <div id="dashboard" class="dashboard" hidden>
+        <nav class="side-nav card" aria-label="Dashboard">
+            <p class="account">Signed in as <span class="account-name"></span></p>
+            <ul>
+                <li><a href="#notifications" data-view-link="notifications">Notifications <span class="badge" id="notification-count" aria-hidden="true"></span></a></li>
+                <li><a href="#send" data-view-link="send">Send a notification</a></li>
+                <li><a href="#browser" data-view-link="browser">Browser notifications</a></li>
+                <li><a href="#keys" data-view-link="keys">API keys</a></li>
+                <li><a href="#devices" data-view-link="devices">Devices</a></li>
+                <li><a href="#account" data-view-link="account">Account</a></li>
+            </ul>
+        </nav>
+
+        <div>
+            <section data-view="notifications" aria-labelledby="notifications-title" hidden>
+                <h1 id="notifications-title" tabindex="-1">Notifications</h1>
+                <div id="notifications-message" class="message" role="alert"></div>
+                <div class="toolbar">
+                    <div class="field">
+                        <label for="search">Search notifications</label>
+                        <input id="search" type="search" autocomplete="off" aria-describedby="search-summary">
+                    </div>
+                    <button class="button secondary" type="button" id="refresh">Refresh</button>
+                    <button class="button danger" type="button" id="clear-all">Delete all</button>
+                </div>
+                <p id="search-summary" class="muted" aria-live="polite"></p>
+                <div class="card">
+                    <ul class="items" id="notification-list"></ul>
+                    <p id="notifications-empty" class="muted" hidden>No notifications yet. <a href="#send">Send yourself one</a> or see <a href="/docs.html#sending">how to send them</a>.</p>
+                </div>
+            </section>
+
+            <section data-view="send" aria-labelledby="send-title" hidden>
+                <h1 id="send-title" tabindex="-1">Send a notification</h1>
+                <p class="muted">Sends to every device signed in to this account, and appears in your notification list.</p>
+                <div class="card">
+                    <div id="send-message" class="message" role="alert"></div>
+                    <form id="send-form" novalidate>
+                        <div class="field">
+                            <label for="send-title-input">Title</label>
+                            <input id="send-title-input" type="text" value="MG Notify" required maxlength="300">
+                        </div>
+                        <div class="field">
+                            <label for="send-body">Message</label>
+                            <textarea id="send-body" required aria-describedby="send-body-hint"></textarea>
+                            <span class="hint" id="send-body-hint">Links like https://example.com and Markdown links like [example](https://example.com) become tappable.</span>
+                        </div>
+                        <button class="button" type="submit">Send</button>
+                    </form>
+                </div>
+            </section>
+
+            <section data-view="browser" aria-labelledby="browser-title" hidden>
+                <h1 id="browser-title" tabindex="-1">Browser notifications</h1>
+                <div class="card">
+                    <p id="browser-state">Checking this browser…</p>
+                    <div id="browser-message" class="message" role="alert"></div>
+                    <div class="actions">
+                        <button class="button" type="button" id="browser-enable" hidden>Turn on browser notifications</button>
+                        <button class="button danger" type="button" id="browser-disable" hidden>Turn off for this browser</button>
+                        <button class="button secondary" type="button" id="browser-test" hidden>Send a test notification</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2 id="sounds-title">Sound</h2>
+                    <p class="hint">While the site is open and in view, new notifications are announced to screen readers and play this sound instead of showing a pop-up. When the site is closed, your system's notification sound plays instead: browsers don't allow custom sounds there.</p>
+                    <div id="sounds-message" class="message" role="alert"></div>
+                    <fieldset class="choices">
+                        <legend>Sound when a notification arrives while this site is open</legend>
+                        <ul class="items" id="sound-list"></ul>
+                    </fieldset>
+                    <div class="actions">
+                        <button class="button secondary small" type="button" id="sound-add">Add sounds</button>
+                        <button class="button danger small" type="button" id="sound-delete-all" hidden>Delete all sounds</button>
+                    </div>
+                    <input type="file" id="sound-files" accept="audio/*" multiple class="visually-hidden" tabindex="-1" aria-hidden="true">
+                    <p class="hint">Sounds must be 30 seconds or less, in a format this browser plays (usually WAV, MP3, M4A or OGG). They're kept in this browser only.</p>
+                </div>
+                <p class="muted">Browser notifications arrive even when this page is closed, as long as the browser is running. On iPhone and iPad, add this site to your Home Screen first (Share, then Add to Home Screen) and turn them on from there. <a href="/docs.html#browser">More about browser notifications</a>.</p>
+            </section>
+
+            <section data-view="keys" aria-labelledby="keys-title" hidden>
+                <h1 id="keys-title" tabindex="-1">API keys</h1>
+                <p class="muted">Anything with one of these keys can send you notifications. Treat them like passwords. <a href="/docs.html#sending">How to use a key</a>.</p>
+                <div id="keys-message" class="message" role="alert"></div>
+                <div class="card">
+                    <h2>Create an API key</h2>
+                    <form id="key-form" class="toolbar" novalidate>
+                        <div class="field">
+                            <label for="key-label">Label</label>
+                            <input id="key-label" type="text" value="Default" required maxlength="100" aria-describedby="key-label-hint">
+                            <span class="hint" id="key-label-hint">A name to tell your keys apart, like "Home server".</span>
+                        </div>
+                        <button class="button" type="submit">Create key</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="actions spread">
+                        <h2 id="key-list-title">Your API keys</h2>
+                        <button class="button danger small" type="button" id="delete-all-keys">Delete all API keys</button>
+                    </div>
+                    <ul class="items" id="key-list" aria-labelledby="key-list-title"></ul>
+                    <p id="keys-empty" class="muted" hidden>No API keys yet.</p>
+                </div>
+            </section>
+
+            <section data-view="devices" aria-labelledby="devices-title" hidden>
+                <h1 id="devices-title" tabindex="-1">Devices</h1>
+                <p class="muted">Every phone and browser signed in to this account with notifications turned on.</p>
+                <div id="devices-message" class="message" role="alert"></div>
+                <div class="card">
+                    <div class="actions spread">
+                        <h2 id="device-list-title">Signed-in devices</h2>
+                        <button class="button danger small" type="button" id="sign-out-others">Sign out other devices</button>
+                    </div>
+                    <ul class="items" id="device-list" aria-labelledby="device-list-title"></ul>
+                    <p id="devices-empty" class="muted" hidden>No devices are registered yet. Sign in with the app, or turn on browser notifications.</p>
+                </div>
+            </section>
+
+            <section data-view="account" aria-labelledby="account-title" hidden>
+                <h1 id="account-title" tabindex="-1">Account</h1>
+                <div class="card">
+                    <p>Signed in as <strong class="account-email"></strong>.</p>
+                    <button class="button danger" type="button" data-sign-out>Sign out</button>
+                </div>
+                <div id="account-message" class="message" role="alert"></div>
+                <div class="card">
+                    <h2 id="display-name-title">Display name</h2>
+                    <form id="display-name-form" class="toolbar" novalidate aria-labelledby="display-name-title">
+                        <div class="field">
+                            <label for="display-name">Display name (optional)</label>
+                            <input id="display-name" type="text" maxlength="60" autocomplete="nickname" aria-describedby="display-name-hint">
+                            <span class="hint" id="display-name-hint">Shown instead of your email address, for example in the apps' account menu and when a new notification is announced. Leave it empty to use your email.</span>
+                        </div>
+                        <button class="button" type="submit">Save</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2 id="change-email-title">Change email</h2>
+                    <form id="email-form" novalidate aria-labelledby="change-email-title">
+                        <input type="text" autocomplete="username" hidden>
+                        <div class="field">
+                            <label for="new-email">New email</label>
+                            <input id="new-email" type="email" autocomplete="email" required spellcheck="false" autocapitalize="off">
+                        </div>
+                        <div class="field">
+                            <label for="email-password">Current password</label>
+                            <input id="email-password" type="password" autocomplete="current-password" required>
+                        </div>
+                        <p class="hint">You'll need to verify the new address before you can use MG Notify again.</p>
+                        <button class="button" type="submit">Change email</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2 id="change-password-title">Change password</h2>
+                    <form id="password-form" novalidate aria-labelledby="change-password-title">
+                        <input type="text" autocomplete="username" hidden>
+                        <div class="field">
+                            <label for="current-password">Current password</label>
+                            <input id="current-password" type="password" autocomplete="current-password" required>
+                        </div>
+                        <div class="field">
+                            <label for="new-password">New password</label>
+                            <input id="new-password" type="password" autocomplete="new-password" required aria-describedby="new-password-hint">
+                            <span class="hint" id="new-password-hint">At least 8 characters. This signs you out everywhere, including here.</span>
+                        </div>
+                        <label class="check"><input type="checkbox" data-show-passwords="password-form"> Show passwords</label>
+                        <button class="button" type="submit">Change password</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2 id="delete-account-title">Delete account</h2>
+                    <form id="delete-form" novalidate aria-labelledby="delete-account-title">
+                        <p>This permanently deletes your account, notifications, API keys and devices.</p>
+                        <input type="text" autocomplete="username" hidden>
+                        <div class="field">
+                            <label for="delete-password">Password</label>
+                            <input id="delete-password" type="password" autocomplete="current-password" required>
+                        </div>
+                        <button class="button danger solid" type="submit">Delete my account</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</main>
+
+<dialog id="email-viewer" class="email-viewer" aria-labelledby="email-subject">
+    <header>
+        <div class="grow">
+            <h2 id="email-subject"></h2>
+            <dl>
+                <dt>From</dt><dd id="email-from"></dd>
+                <dt>Date</dt><dd id="email-date"></dd>
+            </dl>
+        </div>
+        <button class="button secondary small" type="button" id="email-close">Close</button>
+    </header>
+    <iframe id="email-frame" title="Email content" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>
+</dialog>
+
+<footer class="site-footer">
+    <div class="inner">
+        <span>&copy; <span id="year">2026</span> MG Notify</span><span>Version 2.0</span>
+        <a href="/docs.html">Documentation</a>
+        <a href="mailto:mattdovi@icloud.com">Contact</a>
+    </div>
+</footer>
+<div id="status-region" class="visually-hidden" role="status" aria-live="polite"></div>
+<div id="alert-region" class="visually-hidden" role="alert" aria-live="assertive"></div>
+</body>
+</html>

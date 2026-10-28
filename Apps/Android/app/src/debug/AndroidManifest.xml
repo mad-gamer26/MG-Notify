@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds may talk to a plain-HTTP test server (-PmgNotifyServer=http://...),
+     and accept pretend pushes from adb (DebugPushReceiver). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true">
+        <receiver
+            android:name=".DebugPushReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

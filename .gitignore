@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Xcode per-user state
+xcuserdata/
+DerivedData/
+
+# Firebase client config for your own Firebase project (see Apps/Android/README.md)
+Apps/Android/app/google-services.json

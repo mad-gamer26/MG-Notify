@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Documentation – MG Notify</title>
+    <meta name="description" content="How to send MG Notify notifications from scripts, programs and email, and how to use the apps, browser notifications and the API.">
+    <link rel="icon" href="/assets/favicon.png">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/site.css">
+    <script src="/assets/common.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+    <div class="inner">
+        <a class="brand" href="/"><img src="/assets/icon-192.png" alt=""> MG Notify</a>
+        <nav class="site-nav" aria-label="Site">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/docs.html" aria-current="page">Documentation</a></li>
+                <li data-when-signed-in hidden><a href="/app.html">Dashboard</a></li>
+                <li data-when-signed-out><a href="/signin.html">Sign in</a></li>
+            </ul>
+        </nav>
+    </div>
+</header>
+
+<main id="main" class="reading">
+    <h1>MG Notify documentation</h1>
+    <p class="lead">Everything about sending notifications, the apps, browser notifications and the API.</p>
+
+    <nav class="card toc" aria-labelledby="toc-title">
+        <h2 id="toc-title">Contents</h2>
+        <ol>
+            <li><a href="#start">Getting started</a></li>
+            <li><a href="#sending">Sending notifications</a></li>
+            <li><a href="#examples">Examples in common languages</a></li>
+            <li><a href="#formatting">Links in messages</a></li>
+            <li><a href="#email">Email to notification</a></li>
+            <li><a href="#apps">The apps</a></li>
+            <li><a href="#browser">Browser notifications</a></li>
+            <li><a href="#sounds">Notification sounds</a></li>
+            <li><a href="#account">Your account, devices and keys</a></li>
+            <li><a href="#api">API reference</a></li>
+            <li><a href="#realtime">Realtime events</a></li>
+            <li><a href="#errors">Errors</a></li>
+            <li><a href="#privacy">Privacy and your data</a></li>
+            <li><a href="#accessibility">Accessibility</a></li>
+            <li><a href="#help">Help</a></li>
+        </ol>
+    </nav>
+
+    <section aria-labelledby="start">
+        <h2 id="start">Getting started</h2>
+        <ol>
+            <li><a href="/signin.html?mode=register">Create an account</a> (or use the app), then open the link in the verification email we send you.</li>
+            <li>Sign in on the devices that should get notifications: the MG Notify app on iPhone or Android, or <a href="#browser">this website with browser notifications on</a>. Allow notifications when asked.</li>
+            <li>Create an API key on the <a href="/app.html#keys">API keys page</a> of your dashboard, or in the app under Settings, Account Settings, API Keys.</li>
+            <li>Send yourself a notification by opening this address in a browser, with your key in place of <code>YOUR_KEY</code>:
+                <pre tabindex="0"><code>https://notify.mad-gamer.com/api/notify?key=YOUR_KEY&amp;msg=Hello%20from%20MG%20Notify</code></pre>
+            </li>
+        </ol>
+        <p>Every notification is also kept in your notification list in the apps and the dashboard until you delete it.</p>
+    </section>
+
+    <section aria-labelledby="sending">
+        <h2 id="sending">Sending notifications</h2>
+        <p>Send a <code>GET</code> request to <code class="endpoint">https://notify.mad-gamer.com/api/notify</code> with these query parameters. Remember to URL-encode the values (spaces become <code>%20</code>, line breaks <code>%0A</code>).</p>
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">Parameters for /notify</caption>
+                <thead><tr><th scope="col">Parameter</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead>
+                <tbody>
+                    <tr><th scope="row"><code>key</code></th><td>Yes</td><td>Your API key. Several keys separated by commas send to every account they belong to, once each.</td></tr>
+                    <tr><th scope="row"><code>msg</code></th><td>Yes</td><td>The message text.</td></tr>
+                    <tr><th scope="row"><code>title</code></th><td>No</td><td>The notification's title. Defaults to "MG Notify".</td></tr>
+                    <tr><th scope="row"><code>sound</code></th><td>No</td><td>Accepted for older scripts. Each device plays the sound chosen in its app (see <a href="#sounds">sounds</a>).</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p>You can also <code>POST</code> the same fields as JSON to the same address, which keeps your key out of web server logs and handles long messages better:</p>
+        <pre tabindex="0"><code>POST https://notify.mad-gamer.com/api/notify
+Content-Type: application/json
+
+{"key": "YOUR_KEY", "title": "Backup", "msg": "Nightly backup finished."}</code></pre>
+        <h3>The response</h3>
+        <p>A successful send returns status 200 and JSON describing the delivery to each of your devices:</p>
+        <pre tabindex="0"><code>{
+  "status": "sent",
+  "title": "Backup",
+  "message": "Nightly backup finished.",
+  "delivery": {
+    "delivered": 2,
+    "devices": [
+      {"device_id": "…", "device_name": "Matthew's iPhone", "status": "sent", …},
+      {"device_id": "…", "device_name": "Chrome on Windows", "status": "sent", …}
+    ]
+  }
+}</code></pre>
+        <p>Each device's <code>status</code> is <code>sent</code>, <code>failed</code> (with an <code>error</code>), or <code>removed</code> when Apple, Google or the browser says the device no longer exists; MG Notify then forgets it. With no devices signed in, the notification is still saved: <code>"delivered": 0, "stored": true</code>.</p>
+        <p>When you send with several keys, the response lists <code>requested_keys</code>, <code>valid_keys</code>, <code>ignored_keys</code>, <code>delivered_accounts</code> and a <code>deliveries</code> list with one delivery per account.</p>
+    </section>
+
+    <section aria-labelledby="examples">
+        <h2 id="examples">Examples in common languages</h2>
+        <h3>Command line (curl)</h3>
+        <pre tabindex="0"><code>curl -G https://notify.mad-gamer.com/api/notify \
+  --data-urlencode "key=YOUR_KEY" \
+  --data-urlencode "title=Server" \
+  --data-urlencode "msg=Disk usage is at 91%"</code></pre>
+        <h3>Windows PowerShell</h3>
+        <pre tabindex="0"><code>Invoke-RestMethod -Method Post -Uri https://notify.mad-gamer.com/api/notify `
+  -ContentType "application/json" `
+  -Body (@{ key = "YOUR_KEY"; title = "Build"; msg = "The build passed." } | ConvertTo-Json)</code></pre>
+        <h3>Python</h3>
+        <pre tabindex="0"><code>import json, urllib.request
+
+request = urllib.request.Request(
+    "https://notify.mad-gamer.com/api/notify",
+    data=json.dumps({"key": "YOUR_KEY", "title": "Python", "msg": "Job done"}).encode(),
+    headers={"Content-Type": "application/json"},
+)
+urllib.request.urlopen(request)</code></pre>
+        <h3>JavaScript</h3>
+        <pre tabindex="0"><code>await fetch("https://notify.mad-gamer.com/api/notify", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ key: "YOUR_KEY", title: "Website", msg: "New sign-up" }),
+});</code></pre>
+        <h3>Anything else</h3>
+        <p>Any program that can open a web address can notify you: point it at the <code>GET</code> form above.</p>
+    </section>
+
+    <section aria-labelledby="formatting">
+        <h2 id="formatting">Links in messages</h2>
+        <p>Messages are plain text. The apps and the dashboard turn these into links you can tap:</p>
+        <ul>
+            <li>Web addresses: <code>https://example.com/report</code></li>
+            <li>Markdown links, which show only the words: <code>[the report](https://example.com/report)</code></li>
+            <li>Email and phone links: <code>mailto:someone@example.com</code>, <code>tel:5551234</code></li>
+        </ul>
+        <p>Line breaks are kept. In the apps, you can copy a notification as plain or rich text.</p>
+    </section>
+
+    <section aria-labelledby="email">
+        <h2 id="email">Email to notification</h2>
+        <p>Every API key also has an email address: the key followed by <code>@notify.mad-gamer.com</code>, for example <code>mgkey_abc123@notify.mad-gamer.com</code>. Email sent there becomes a notification:</p>
+        <ul>
+            <li>The title shows the sender and subject, for example <q>Jane Example: Weekly report</q>.</li>
+            <li>The push says <q>Open MG Notify to view the full email.</q></li>
+            <li>Opening it in the app or dashboard shows the sender, address, subject, date and the email itself. Scripts, forms, tracking pixels and unsafe links are removed first.</li>
+            <li>Letter case in the key part of the address doesn't matter, since some mail programs change it.</li>
+        </ul>
+        <p>Use it to forward alerts from services that can only send email, or set up an email forwarding rule. The dashboard's API keys page has a button to copy each key's address.</p>
+    </section>
+
+    <section aria-labelledby="apps">
+        <h2 id="apps">The apps</h2>
+        <h3>iPhone and iPad</h3>
+        <p>Search for MG Notify in the App Store. Sign in, allow notifications, and they arrive like any other app's. The app keeps your notification list, lets you copy, search and delete notifications, open emails, choose a sound, manage API keys and devices, and switch between several accounts.</p>
+        <h3>Android</h3>
+        <p>The Android app works the same way, with your choice of sound for each device, a long-press menu on each notification, TalkBack actions, and a share target: share audio files to MG Notify to add them as notification sounds.</p>
+        <h3 id="android-install">Installing on Android</h3>
+        <ol>
+            <li>On your phone, <a href="/downloads/mg-notify-latest.apk">download MG Notify for Android</a> (Android 8 or later).</li>
+            <li>Open the downloaded file. If Android says your browser isn't allowed to install apps, choose Settings, allow it (<q>Always allow</q> or <q>Allow from this source</q>, depending on your Android version), and go back.</li>
+            <li>Choose Install. If Google Play Protect says it hasn't seen the app before, you can choose <q>Scan app</q> or <q>Install without scanning</q>; MG Notify isn't on Google Play, so this is expected.</li>
+            <li>Open MG Notify and sign in.</li>
+        </ol>
+        <p>The app keeps itself up to date: it checks for new versions about twice a day and offers to install them, and you can check yourself under Settings, About. The first time, Android asks you to let MG Notify install apps; each update still asks you to confirm.</p>
+        <h3>Unread notifications and badges</h3>
+        <p>New notifications are marked <q>New</q> until you've seen them, in the apps and on this site. Opening your notifications on any device marks them seen everywhere. On iPhone and iPad, the app icon shows how many are unread, counting every account signed in on that device.</p>
+        <h3>Several accounts on one device</h3>
+        <p>In either app, open the account menu at the top of your notifications and choose Add Account. The device gets notifications for every account it's signed in to; tapping a notification switches to its account.</p>
+    </section>
+
+    <section aria-labelledby="browser">
+        <h2 id="browser">Browser notifications</h2>
+        <p>Your browser can get MG Notify notifications too, even with the site closed, as long as the browser is running.</p>
+        <ol>
+            <li>Sign in and open <a href="/app.html#browser">Browser notifications</a> in your dashboard.</li>
+            <li>Choose <q>Turn on browser notifications</q> and allow notifications when the browser asks.</li>
+            <li>Use <q>Send a test notification</q> to check.</li>
+        </ol>
+        <p>This works in current versions of Chrome, Edge, Firefox, Opera and Safari on desktop and Android. On iPhone and iPad, add the site to your Home Screen first (Share, then Add to Home Screen), open it from there, sign in and turn notifications on. The browser shows up in your device list; turn it off on the same page or sign it out from any device. Notification sounds in the browser are your system's.</p>
+        <p>If you've blocked notifications for this site, allow them again in your browser's site settings (usually the icon to the left of the address).</p>
+    </section>
+
+    <section aria-labelledby="sounds">
+        <h2 id="sounds">Notification sounds</h2>
+        <p>On this website, choose a sound under <a href="/app.html#browser">Browser notifications</a> in your dashboard: Chime, No sound, or sounds you add from your computer or phone (30 seconds or less, kept in that browser only). It plays when a notification arrives while the site is open. When the site is closed, browsers always use your system's notification sound.</p>
+        <p>Each device chooses its own sound in the app under Settings, Notification Sound: No Sound, the system default, or a sound you've added. Sounds must be 30 seconds or shorter.</p>
+        <ul>
+            <li>iPhone and iPad: AIFF, WAV and CAF files.</li>
+            <li>Android: WAV, MP3, OGG, Opus, M4A, AAC, FLAC and MIDI files.</li>
+        </ul>
+        <p>The sound applies to every account on that device, and is used whatever a script asks for.</p>
+    </section>
+
+    <section aria-labelledby="account">
+        <h2 id="account">Your account, devices and keys</h2>
+        <dl>
+            <dt><strong>Devices</strong></dt>
+            <dd>The <a href="/app.html#devices">Devices page</a> lists every phone and browser signed in with notifications on, with its last address and when it was last seen. Sign out any of them, or all but this one.</dd>
+            <dt><strong>API keys</strong></dt>
+            <dd>Create as many keys as you like, with a label for each, so you can delete one without breaking the others.</dd>
+            <dt><strong>Display name</strong></dt>
+            <dd>Optionally give your account a name, such as <q>Work</q> or your own name. It's shown instead of your email address in the apps' account menu and in announcements. Set it on the <a href="/app.html#account">Account page</a> or in the app's Account Settings.</dd>
+            <dt><strong>Changing your email</strong></dt>
+            <dd>You'll need to verify the new address before using MG Notify again.</dd>
+            <dt><strong>Changing or resetting your password</strong></dt>
+            <dd>Signs you out on every device, for safety. Forgot it? Use Forgot password on the <a href="/signin.html?mode=forgot">sign-in page</a>; the emailed link works for an hour.</dd>
+            <dt><strong>Deleting your account</strong></dt>
+            <dd>Permanently removes your account, notifications, API keys and devices, and signs out your devices.</dd>
+        </dl>
+        <p>Sign-ins stay active while you use them. A device or browser unused for 180 days is signed out automatically.</p>
+    </section>
+
+    <section aria-labelledby="api">
+        <h2 id="api">API reference</h2>
+        <p>The apps and this site use the same API, at <code>https://notify.mad-gamer.com/api</code>. It takes and returns JSON. Requests marked <q>session</q> need an <code>Authorization: Bearer SESSION_TOKEN</code> header, where the token comes from signing in; <q>verified</q> also needs a verified email address. To just send notifications, all you need is <a href="#sending">/notify</a> and an API key.</p>
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">API endpoints</caption>
+                <thead><tr><th scope="col">Request</th><th scope="col">Needs</th><th scope="col">Does</th></tr></thead>
+                <tbody>
+                    <tr><th scope="row"><code>GET /notify</code>, <code>POST /notify</code></th><td>API key</td><td>Sends a notification (<a href="#sending">details</a>).</td></tr>
+                    <tr><th scope="row"><code>GET /health</code></th><td>Nothing</td><td>Server status.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/register</code></th><td>Nothing</td><td><code>{"email", "password"}</code>. Creates an account and returns <code>account</code> and <code>session.session_token</code>; sends a verification email.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/login</code></th><td>Nothing</td><td><code>{"email", "password"}</code>. Returns <code>account</code> and <code>session.session_token</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/logout</code></th><td>Session</td><td>Ends this session, and signs out its device.</td></tr>
+                    <tr><th scope="row"><code>GET /auth/me</code></th><td>Session</td><td>The signed-in account: <code>account_id</code>, <code>email</code>, <code>email_verified</code>, <code>display_name</code> (or null).</td></tr>
+                    <tr><th scope="row"><code>GET /events</code></th><td>Session</td><td>A Server-Sent Events stream of changes as they happen (<a href="#realtime">details</a>).</td></tr>
+                    <tr><th scope="row"><code>POST /account/display-name</code></th><td>Session</td><td><code>{"display_name"}</code>, up to 60 characters; empty removes it. Returns the <code>account</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/resend-verification</code></th><td>Session</td><td>Sends a new verification email.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/verify-email</code></th><td>Nothing</td><td><code>{"token"}</code> from the verification email.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/request-password-reset</code></th><td>Nothing</td><td><code>{"email"}</code>. Sends a reset link if the account exists.</td></tr>
+                    <tr><th scope="row"><code>POST /auth/reset-password</code></th><td>Nothing</td><td><code>{"token", "new_password"}</code>. Signs out every device.</td></tr>
+                    <tr><th scope="row"><code>POST /account/change-email</code></th><td>Session</td><td><code>{"new_email", "password"}</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /account/change-password</code></th><td>Session</td><td><code>{"current_password", "new_password"}</code>. Signs out every device.</td></tr>
+                    <tr><th scope="row"><code>POST /account/delete</code></th><td>Session</td><td><code>{"password"}</code>. Deletes the account and everything in it.</td></tr>
+                    <tr><th scope="row"><code>POST /account/notify</code></th><td>Verified</td><td><code>{"title", "message"}</code>. Sends to your own devices.</td></tr>
+                    <tr><th scope="row"><code>GET /notifications</code></th><td>Verified</td><td>Your notifications, newest first, each with <code>seen</code>, plus <code>unread_count</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /notifications/mark-seen</code></th><td>Verified</td><td>Marks notifications seen: <code>{"notification_ids": [...]}</code>, or <code>{}</code> for all. Returns <code>marked</code>, <code>unread_count</code> and <code>badge</code> (this device's unread total across its accounts, or null).</td></tr>
+                    <tr><th scope="row"><code>DELETE /notifications/ID</code></th><td>Verified</td><td>Deletes one notification.</td></tr>
+                    <tr><th scope="row"><code>DELETE /notifications</code></th><td>Verified</td><td>Deletes them all; returns <code>deleted_count</code>.</td></tr>
+                    <tr><th scope="row"><code>GET /api-keys</code></th><td>Verified</td><td>Your API keys.</td></tr>
+                    <tr><th scope="row"><code>POST /api-keys/create</code></th><td>Verified</td><td><code>{"label"}</code>. Returns the new <code>api_key</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /api-keys/delete</code></th><td>Verified</td><td><code>{"key_id"}</code>.</td></tr>
+                    <tr><th scope="row"><code>POST /api-keys/delete-all</code></th><td>Verified</td><td>Deletes every key.</td></tr>
+                    <tr><th scope="row"><code>GET /devices</code></th><td>Verified</td><td>Your devices.</td></tr>
+                    <tr><th scope="row"><code>POST /devices/register</code></th><td>Session</td><td>Registers this device for pushes: <code>device_id</code>, <code>device_name</code>, <code>platform</code> (<code>ios</code>, <code>android</code> or <code>web</code>), and <code>apns_token</code> with <code>apns_environment</code>, <code>fcm_token</code>, or <code>web_push</code> (a browser push subscription) to match. Optional <code>notification_sound</code>, and <code>badges: true</code> from apps that keep their badge up to date.</td></tr>
+                    <tr><th scope="row"><code>POST /devices/sound</code></th><td>Verified</td><td><code>{"device_id", "notification_sound"}</code>.</td></tr>
+                    <tr><th scope="row"><code>DELETE /devices/ID</code></th><td>Session</td><td>Removes a device.</td></tr>
+                    <tr><th scope="row"><code>POST /devices/ID/sign-out</code></th><td>Verified</td><td>Signs a device out.</td></tr>
+                    <tr><th scope="row"><code>POST /devices/sign-out-other</code></th><td>Verified</td><td>Signs out every device except the one this session registered.</td></tr>
+                    <tr><th scope="row"><code>GET /web-push/public-key</code></th><td>Nothing</td><td>The server's Web Push (VAPID) public key, for browser subscriptions.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section aria-labelledby="realtime">
+        <h2 id="realtime">Realtime events</h2>
+        <p>The apps and this site stay up to date without refreshing: while one is open, it keeps a connection to <code>GET /events</code> (with the session's <code>Authorization</code> header) and the server sends each change the moment it happens. When an app is closed, a silent push does the same job.</p>
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">Events</caption>
+                <thead><tr><th scope="col">Event</th><th scope="col">Data</th><th scope="col">Meaning</th></tr></thead>
+                <tbody>
+                    <tr><th scope="row"><code>ready</code></th><td><code>account</code></td><td>Sent first on every connection; refresh anything you might have missed.</td></tr>
+                    <tr><th scope="row"><code>notification</code></th><td><code>notification</code></td><td>A new notification.</td></tr>
+                    <tr><th scope="row"><code>notification_deleted</code></th><td><code>notification_id</code></td><td>One was deleted.</td></tr>
+                    <tr><th scope="row"><code>notifications_cleared</code></th><td>none</td><td>All were deleted.</td></tr>
+                    <tr><th scope="row"><code>notifications_seen</code></th><td><code>notification_ids</code></td><td>These were seen (on any device).</td></tr>
+                    <tr><th scope="row"><code>account_updated</code></th><td><code>account</code></td><td>Email, verification or display name changed.</td></tr>
+                    <tr><th scope="row"><code>devices_updated</code>, <code>api_keys_updated</code></th><td>none</td><td>Fetch the list again.</td></tr>
+                    <tr><th scope="row"><code>signed_out</code>, <code>account_deleted</code></th><td>none</td><td>This session has ended; the stream closes.</td></tr>
+                    <tr><th scope="row"><code>resync</code></th><td>none</td><td>Some events were missed; fetch everything again.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p>A comment line is sent every 20 seconds to keep the connection open. Every push for a notification also carries its <code>notification_id</code>, so a client can tell the push and the event apart.</p>
+    </section>
+
+    <section aria-labelledby="errors">
+        <h2 id="errors">Errors</h2>
+        <p>Errors come back with a status code and JSON like <code>{"detail": "Invalid API key"}</code>.</p>
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">Error status codes</caption>
+                <thead><tr><th scope="col">Status</th><th scope="col">Meaning</th></tr></thead>
+                <tbody>
+                    <tr><th scope="row">400</th><td>Something in the request isn't usable, like a used or expired link.</td></tr>
+                    <tr><th scope="row">401</th><td>Wrong API key, password or session. For a session, sign in again.</td></tr>
+                    <tr><th scope="row">403</th><td>The account's email address needs verifying first.</td></tr>
+                    <tr><th scope="row">404</th><td>No such notification, key, device or link.</td></tr>
+                    <tr><th scope="row">409</th><td>That email address already has an account.</td></tr>
+                    <tr><th scope="row">422</th><td>A field is missing or invalid; <code>detail</code> says which.</td></tr>
+                    <tr><th scope="row">502, 503</th><td>An email or push service couldn't be reached. Try again shortly.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section aria-labelledby="privacy">
+        <h2 id="privacy">Privacy and your data</h2>
+        <p>MG Notify keeps only what it needs to work:</p>
+        <ul>
+            <li>Your email address, and your password as a one-way hash (never the password itself).</li>
+            <li>Your notifications, until you delete them or your account.</li>
+            <li>Your API keys, so you can view and copy them.</li>
+            <li>Your signed-in devices: their name, push address, last IP address and when they were last seen.</li>
+            <li>Sign-ins and email links, stored only as one-way hashes.</li>
+        </ul>
+        <p>Notifications are delivered through Apple (iPhone), Google (Android) or your browser's push service. Email is handled by Brevo. There's no advertising and no tracking. Backups are kept for 14 days. Deleting your account removes your data straight away; it leaves the backups within 14 days.</p>
+    </section>
+
+    <section aria-labelledby="accessibility">
+        <h2 id="accessibility">Accessibility</h2>
+        <p>MG Notify is built to be fully usable with screen readers (VoiceOver, TalkBack, NVDA, JAWS and Narrator), braille displays, keyboards, switch access, zoom and large text, in light and dark mode. Every action on this site works from the keyboard, form errors and updates are announced, and new notifications are announced while your dashboard is open. In the apps, swipe actions are also in the actions menu (VoiceOver rotor or TalkBack's actions).</p>
+        <p>When a notification arrives while an app or this site is open and in front, it isn't shown as a pop-up. Instead it's announced to your screen reader, as <q>New notification: title, message</q>, or <q>New notification in account: title, message</q> when you're signed in to several accounts in an app, and your chosen sound plays. Everything else (deleted notifications, sign-outs, changes made on your other devices) updates straight away too.</p>
+        <p>If anything is hard to use, please <a href="mailto:mattdovi@icloud.com">tell us</a>.</p>
+    </section>
+
+    <section aria-labelledby="help">
+        <h2 id="help">Help</h2>
+        <h3>Notifications aren't arriving</h3>
+        <ul>
+            <li>Check the device appears on your <a href="/app.html#devices">Devices page</a>. If not, sign in on it again.</li>
+            <li>Check notifications are allowed for MG Notify in the device's or browser's settings, and that Do Not Disturb or Focus isn't on.</li>
+            <li>Use Send a notification in your dashboard; the result says how many devices it reached.</li>
+        </ul>
+        <h3>I didn't get the verification or reset email</h3>
+        <p>Check your spam folder, then use Resend verification email in the app or dashboard, or request another reset. Reset links expire after an hour, verification links after a day.</p>
+        <h3>Contact</h3>
+        <p>Email <a href="mailto:mattdovi@icloud.com">mattdovi@icloud.com</a>.</p>
+    </section>
+</main>
+
+<footer class="site-footer">
+    <div class="inner">
+        <span>&copy; <span id="year">2026</span> MG Notify</span><span>Version 2.0</span>
+        <a href="/">Home</a>
+        <a href="#privacy">Privacy</a>
+        <a href="mailto:mattdovi@icloud.com">Contact</a>
+    </div>
+</footer>
+<div id="status-region" class="visually-hidden" role="status" aria-live="polite"></div>
+<div id="alert-region" class="visually-hidden" role="alert" aria-live="assertive"></div>
+</body>
+</html>

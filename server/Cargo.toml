@@ -1,0 +1,38 @@
+[package]
+name = "mg-notify-server"
+version = "2.0.0"
+edition = "2024"
+description = "MG Notify's push server: accounts, API keys, notifications and delivery through APNs, FCM and Web Push"
+publish = false
+
+[dependencies]
+aes-gcm = "0.10"
+ammonia = "4"
+argon2 = "0.5"
+axum = "0.8"
+base64 = "0.22"
+futures = "0.3"
+hex = "0.4"
+hkdf = "0.12"
+jsonwebtoken = "9"
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
+p256 = { version = "0.13", features = ["ecdh", "ecdsa", "pem", "pkcs8"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+rand = "0.8"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["http2", "json", "rustls-tls"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

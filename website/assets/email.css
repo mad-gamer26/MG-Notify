@@ -1,0 +1,8 @@
+/* Inside the email viewer's sandboxed frame. */
+:root { color-scheme: light; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 16px; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #111; background: #fff; overflow-wrap: anywhere; }
+img, video { max-width: 100%; height: auto; }
+table { max-width: 100%; }
+pre { white-space: pre-wrap; }
+a { color: #0059c1; }
