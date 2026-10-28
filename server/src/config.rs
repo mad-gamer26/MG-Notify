@@ -1,5 +1,6 @@
 //! config.json: the same file and keys the Python server used, so an
-//! existing ~/notify/config.json works unchanged.
+//! existing ~/notify/config.json works unchanged, plus `inbound_email` for
+//! the built-in SMTP receiver.
 
 use serde_json::{Map, Value, json};
 use std::io::{BufRead, Write};
@@ -26,6 +27,12 @@ pub struct ConfigValues {
     pub smtp_from_name: String,
     pub smtp_use_tls: String,
     pub web_base_url: String,
+    pub inbound_email_domain: String,
+    pub inbound_smtp_bind_host: String,
+    pub inbound_smtp_bind_port: String,
+    pub inbound_smtp_hostname: String,
+    pub inbound_smtp_tls_cert_path: String,
+    pub inbound_smtp_tls_key_path: String,
 }
 
 impl Default for ConfigValues {
@@ -49,6 +56,12 @@ impl Default for ConfigValues {
             smtp_from_name: String::new(),
             smtp_use_tls: "true".into(),
             web_base_url: "http://127.0.0.1/web/index.php".into(),
+            inbound_email_domain: "notify.mad-gamer.com".into(),
+            inbound_smtp_bind_host: "127.0.0.1".into(),
+            inbound_smtp_bind_port: String::new(),
+            inbound_smtp_hostname: String::new(),
+            inbound_smtp_tls_cert_path: String::new(),
+            inbound_smtp_tls_key_path: String::new(),
         }
     }
 }
@@ -75,6 +88,16 @@ pub struct Settings {
     pub smtp_from_name: Option<String>,
     pub smtp_use_tls: bool,
     pub web_base_url: Option<String>,
+    /// Email to `<API key>@<inbound_email_domain>` becomes a notification.
+    pub inbound_email_domain: String,
+    pub inbound_smtp_bind_host: String,
+    /// The built-in SMTP receiver's port; none turns it off.
+    pub inbound_smtp_port: Option<u16>,
+    /// The name the SMTP receiver greets with (defaults to the domain).
+    pub inbound_smtp_hostname: String,
+    /// A certificate and key for STARTTLS; without them mail arrives unencrypted.
+    pub inbound_smtp_tls_cert_path: Option<PathBuf>,
+    pub inbound_smtp_tls_key_path: Option<PathBuf>,
 }
 
 impl Settings {
@@ -112,6 +135,7 @@ pub fn load_values(path: &Path) -> Result<ConfigValues, String> {
     let payload: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let section = |name: &str| payload.get(name);
     let (server, apns, fcm, smtp, web) = (section("server"), section("apns"), section("fcm"), section("smtp"), section("web"));
+    let inbound = section("inbound_email");
     let d = &defaults;
     Ok(ConfigValues {
         data_dir: get_str(server, "data_dir", &d.data_dir),
@@ -132,6 +156,12 @@ pub fn load_values(path: &Path) -> Result<ConfigValues, String> {
         smtp_from_name: get_str(smtp, "from_name", ""),
         smtp_use_tls: get_scalar(smtp, "use_tls", &d.smtp_use_tls),
         web_base_url: get_str(web, "base_url", &d.web_base_url),
+        inbound_email_domain: get_str(inbound, "domain", &d.inbound_email_domain),
+        inbound_smtp_bind_host: get_str(inbound, "smtp_bind_host", &d.inbound_smtp_bind_host),
+        inbound_smtp_bind_port: get_scalar(inbound, "smtp_bind_port", ""),
+        inbound_smtp_hostname: get_str(inbound, "smtp_hostname", ""),
+        inbound_smtp_tls_cert_path: get_str(inbound, "tls_cert_path", ""),
+        inbound_smtp_tls_key_path: get_str(inbound, "tls_key_path", ""),
     })
 }
 
@@ -197,6 +227,15 @@ pub fn to_settings(path: &Path, v: &ConfigValues) -> Result<Settings, String> {
         smtp_from_name: optional(&v.smtp_from_name),
         smtp_use_tls: parse_bool(&v.smtp_use_tls, "smtp_use_tls")?,
         web_base_url: optional(&v.web_base_url),
+        inbound_email_domain: required(&v.inbound_email_domain, "inbound_email.domain")?.to_lowercase(),
+        inbound_smtp_bind_host: required(&v.inbound_smtp_bind_host, "inbound_email.smtp_bind_host")?,
+        inbound_smtp_port: optional(&v.inbound_smtp_bind_port)
+            .map(|p| parse_port(&p, "inbound_email.smtp_bind_port"))
+            .transpose()?,
+        inbound_smtp_hostname: optional(&v.inbound_smtp_hostname)
+            .unwrap_or_else(|| v.inbound_email_domain.trim().to_lowercase()),
+        inbound_smtp_tls_cert_path: optional(&v.inbound_smtp_tls_cert_path).map(|p| resolve(&dir, &p)),
+        inbound_smtp_tls_key_path: optional(&v.inbound_smtp_tls_key_path).map(|p| resolve(&dir, &p)),
         config_dir: dir,
     })
 }
@@ -215,6 +254,11 @@ pub fn write_values(path: &Path, v: &ConfigValues) -> std::io::Result<()> {
             "from_email": v.smtp_from_email, "from_name": v.smtp_from_name, "use_tls": v.smtp_use_tls,
         },
         "web": {"base_url": v.web_base_url},
+        "inbound_email": {
+            "domain": v.inbound_email_domain, "smtp_bind_host": v.inbound_smtp_bind_host,
+            "smtp_bind_port": v.inbound_smtp_bind_port, "smtp_hostname": v.inbound_smtp_hostname,
+            "tls_cert_path": v.inbound_smtp_tls_cert_path, "tls_key_path": v.inbound_smtp_tls_key_path,
+        },
     });
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -274,6 +318,14 @@ pub fn run_configure(path: &Path, existing_error: Option<&str>) -> Result<(), St
     v.smtp_from_name = ask("SMTP from name", &v.smtp_from_name, true, &any);
     v.smtp_use_tls = ask("SMTP use TLS", &v.smtp_use_tls, false, &|s| parse_bool(s, "smtp_use_tls").map(|b| b.to_string()));
     v.web_base_url = ask("Web base URL", &v.web_base_url, true, &any);
+    v.inbound_email_domain = ask("Inbound email domain", &v.inbound_email_domain, false, &|s| required(s, "domain"));
+    v.inbound_smtp_bind_host = ask("Inbound SMTP bind host", &v.inbound_smtp_bind_host, false, &|s| required(s, "smtp_bind_host"));
+    v.inbound_smtp_bind_port = ask("Inbound SMTP port (empty turns it off)", &v.inbound_smtp_bind_port, true, &|s| {
+        parse_port(s, "smtp_bind_port").map(|p| p.to_string())
+    });
+    v.inbound_smtp_hostname = ask("Inbound SMTP host name", &v.inbound_smtp_hostname, true, &any);
+    v.inbound_smtp_tls_cert_path = ask("Inbound SMTP TLS certificate path", &v.inbound_smtp_tls_cert_path, true, &any);
+    v.inbound_smtp_tls_key_path = ask("Inbound SMTP TLS key path", &v.inbound_smtp_tls_key_path, true, &any);
     write_values(path, &v).map_err(|e| e.to_string())?;
     load(path)?;
     println!("Saved configuration to {}", path.display());

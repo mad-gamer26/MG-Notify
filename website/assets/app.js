@@ -8,6 +8,10 @@ const state = {
     knownIds: null,
     /** Unread when this page saw them: marked "New" until the page is reloaded. */
     newIds: new Set(),
+    /** Emails opened on this page: seen, even if a reload started before that says otherwise. */
+    openedEmailIds: new Set(),
+    /** An email whose browser notification was clicked, opened once it's loaded. */
+    emailToOpen: new URLSearchParams(location.search).get("open"),
     devices: [],
     keys: [],
     view: null,
@@ -82,6 +86,11 @@ async function start() {
         // already brought it, so it's only fetched if it's new.
         navigator.serviceWorker.addEventListener("message", (event) => {
             const id = event.data && event.data.notification_id;
+            if (event.data && event.data.type === "mg-notify-open-email" && id) {
+                state.emailToOpen = id;
+                if (!openRequestedEmail()) loadNotifications(true);
+                return;
+            }
             if (event.data && event.data.type === "mg-notify-push" && id && state.knownIds && !state.knownIds.has(id)) {
                 loadNotifications(true);
             }
@@ -268,9 +277,11 @@ async function loadNotifications(quietly) {
     const items = result.notifications;
     const fresh = state.knownIds && quietly ? items.filter((n) => !state.knownIds.has(n.notification_id)) : [];
     state.knownIds = new Set(items.map((n) => n.notification_id));
+    for (const n of items) if (state.openedEmailIds.has(n.notification_id)) n.seen = true;
     for (const n of items) if (n.seen === false) state.newIds.add(n.notification_id);
     state.notifications = items;
     renderNotifications();
+    openRequestedEmail();
     // Ones that arrived while the connection was down.
     if (fresh.length === 1) announceNotification(fresh[0]);
     else if (fresh.length > 1 && document.visibilityState === "visible") {
@@ -322,7 +333,8 @@ let markSeenTimer = null;
 function scheduleMarkSeen() {
     clearTimeout(markSeenTimer);
     markSeenTimer = setTimeout(async () => {
-        const inView = document.visibilityState === "visible" && state.view === "notifications" && !$("dashboard").hidden;
+        const inView = document.visibilityState === "visible" && state.view === "notifications" && !$("dashboard").hidden &&
+            !$("email-viewer").open;
         if (!inView || !state.notifications.some((n) => n.seen === false)) return;
         try {
             await call("POST", "/notifications/mark-seen", {});
@@ -387,7 +399,35 @@ async function deleteNotification(notification, trigger) {
     });
 }
 
+/** The email from a clicked browser notification, if it's loaded: shown, and true. */
+function openRequestedEmail() {
+    const id = state.emailToOpen;
+    const notification = id && state.notifications.find((n) => n.notification_id === id);
+    if (!notification) return false;
+    state.emailToOpen = null;
+    if (new URLSearchParams(location.search).has("open")) history.replaceState(null, "", "/app.html#notifications");
+    if (state.view !== "notifications") {
+        location.hash = "notifications";
+        route(false);
+    }
+    if ($("email-viewer").open) $("email-viewer").close();
+    openEmail(notification);
+    return true;
+}
+
+/** Opening an email counts as seeing it: here, everywhere else, and its "New" marker goes. */
+function markEmailSeen(notification) {
+    const id = notification.notification_id;
+    state.openedEmailIds.add(id);
+    state.newIds.delete(id);
+    document.querySelector(`[data-id="${CSS.escape(id)}"] .badge.new`)?.remove();
+    if (notification.seen !== false) return;
+    notification.seen = true;
+    call("POST", "/notifications/mark-seen", { notification_ids: [id] }).catch(() => {});
+}
+
 function openEmail(notification) {
+    markEmailSeen(notification);
     const parts = emailParts(notification);
     $("email-subject").textContent = parts.subject;
     $("email-from").textContent = parts.address ? `${parts.name} <${parts.address}>` : parts.name;
@@ -933,6 +973,8 @@ document.addEventListener("DOMContentLoaded", () => {
     $("email-close").addEventListener("click", () => $("email-viewer").close());
     $("email-viewer").addEventListener("close", () => {
         $("email-frame").srcdoc = "";
+        // The list is back in view.
+        scheduleMarkSeen();
     });
     $("send-form").addEventListener("submit", sendNotification);
     $("browser-enable").addEventListener("click", enableBrowserNotifications);

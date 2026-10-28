@@ -38,6 +38,7 @@ def main():
 
     sink = mail_sink.MailSink()
     port = free_port()
+    smtp_port = None if args.python_server else free_port()
     workdir = pathlib.Path(tempfile.mkdtemp(prefix="mgn-contract-"))
     (workdir / "config.json").write_text(json.dumps({
         "server": {"data_dir": "./data", "bind_host": "127.0.0.1", "bind_port": str(port), "log_level": "WARNING"},
@@ -46,6 +47,8 @@ def main():
         "smtp": {"host": "127.0.0.1", "port": str(sink.port), "username": "", "password": "",
                  "from_email": "test@example.com", "from_name": "MG Notify", "use_tls": "false"},
         "web": {"base_url": "https://notify.example.com"},
+        "inbound_email": {"domain": "notify.mad-gamer.com", "smtp_bind_host": "127.0.0.1",
+                          "smtp_bind_port": str(smtp_port or "")},
     }))
     (workdir / "brevo-webhook-secret").write_text(test_api.WEBHOOK_SECRET)
     if args.python_server:
@@ -67,6 +70,7 @@ def main():
             sys.exit("server did not start; see " + str(workdir / "server.log"))
         test_api.BASE_URL = base
         test_api.SINK = sink
+        test_api.SMTP_PORT = smtp_port
         loader = unittest.TestLoader()
         if args.pattern:
             loader.testNamePatterns = [f"*{args.pattern}*"]

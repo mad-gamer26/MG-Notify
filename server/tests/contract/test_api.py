@@ -7,6 +7,7 @@ BASE_URL and SINK below.
 import json
 import queue
 import re
+import smtplib
 import threading
 import time
 import unittest
@@ -17,6 +18,7 @@ import uuid
 
 BASE_URL = ""
 SINK = None
+SMTP_PORT = None  # the built-in SMTP receiver, when the server has one
 WEBHOOK_SECRET = "testsecret"
 
 
@@ -410,6 +412,75 @@ class InboundEmailTests(ContractTest):
         self.assertEqual(email["message"], "Line one\nhttps://example.com/a?b=1&c=2\n\nPara two")
         self.assertEqual(email["html"], '<p>Line one<br><a href="https://example.com/a?b=1&amp;c=2">'
                                         'https://example.com/a?b=1&amp;c=2</a></p><p>Para two</p>')
+
+
+class SMTPTests(ContractTest):
+    """Mail handed straight to the server's own SMTP receiver."""
+
+    def setUp(self):
+        if not SMTP_PORT:
+            self.skipTest("this server has no SMTP receiver")
+
+    def smtp(self):
+        connection = smtplib.SMTP("127.0.0.1", SMTP_PORT, timeout=10)
+        connection.ehlo("tests.example.com")
+        return connection
+
+    def test_delivery(self):
+        _, token, _ = self.register()
+        key = self.api_key(token)["api_key"]
+        message = (
+            "From: Jane Example <jane@example.com>\r\n"
+            "To: undisclosed-recipients:;\r\n"
+            "Subject: Weekly   report\r\n"
+            f"Message-ID: <{uuid.uuid4()}@example.com>\r\n"
+            "MIME-Version: 1.0\r\n"
+            "Content-Type: multipart/alternative; boundary=b\r\n\r\n"
+            "--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello! See https://example.com/report\r\n"
+            "--b\r\nContent-Type: text/html\r\n\r\n<h2>Weekly</h2><p onclick='x()'>Hi</p><script>alert(1)</script>\r\n"
+            "--b--\r\n"
+        )
+        with self.smtp() as connection:
+            # The envelope decides (a Bcc recipient works); case is ignored.
+            refused = connection.sendmail("jane@example.com", [f"{key.upper()}@notify.mad-gamer.com"], message)
+            self.assertEqual(refused, {})
+        # Delivered before the server says 250, so it's there already.
+        email = self.expect(request("GET", "/notifications", token=token), 200)["notifications"][0]
+        self.assertTrue(email["email"])
+        self.assertEqual(email["title"], "Jane Example <jane@example.com>: Weekly report")
+        self.assertEqual(email["message"], "Hello! See https://example.com/report")
+        self.assertEqual(email["html"], "<h2>Weekly</h2><p>Hi</p>")
+
+    def test_plain_text_and_dot_stuffing(self):
+        _, token, _ = self.register()
+        key = self.api_key(token)["api_key"]
+        message = "From: bob@example.com\r\nSubject: Dots\r\n\r\nLine one\r\n.Leading dot\r\n"
+        with self.smtp() as connection:
+            connection.sendmail("bob@example.com", [f"{key}@notify.mad-gamer.com"], message)
+        email = self.expect(request("GET", "/notifications", token=token), 200)["notifications"][0]
+        self.assertEqual(email["title"], "Unknown sender <bob@example.com>: Dots")
+        self.assertEqual(email["message"], "Line one\n.Leading dot")
+
+    def test_only_api_key_addresses(self):
+        _, token, _ = self.register()
+        key = self.api_key(token)["api_key"]
+        with self.smtp() as connection:
+            connection.mail("someone@example.com")
+            for address in ("mgkey_nope@notify.mad-gamer.com", f"{key}@elsewhere.example", "postmaster@notify.mad-gamer.com"):
+                self.assertEqual(connection.rcpt(address)[0], 550, address)
+            self.assertEqual(connection.rcpt(f"{key}@notify.mad-gamer.com")[0], 250)
+
+    def test_duplicates_and_order(self):
+        _, token, _ = self.register()
+        key = self.api_key(token)["api_key"]
+        message = f"From: a@example.com\r\nSubject: Once\r\nMessage-ID: <{uuid.uuid4()}@example.com>\r\n\r\nHi\r\n"
+        with self.smtp() as connection:
+            self.assertEqual(connection.docmd("RCPT", f"TO:<{key}@notify.mad-gamer.com>")[0], 503)
+            self.assertEqual(connection.docmd("DATA")[0], 503)
+            connection.sendmail("a@example.com", [f"{key}@notify.mad-gamer.com"], message)
+            connection.sendmail("a@example.com", [f"{key}@notify.mad-gamer.com"], message)
+        notifications = self.expect(request("GET", "/notifications", token=token), 200)["notifications"]
+        self.assertEqual([n["title"] for n in notifications], ["Unknown sender <a@example.com>: Once"])
 
 
 class EventStream:

@@ -38,6 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -95,6 +96,8 @@ class MGNotifyModel(private val app: Application) {
         private set
     var notificationsRefreshToken by mutableIntStateOf(0)
         private set
+    /** An email notification the person tapped, opened once it's in the list. */
+    var emailNotificationToOpen by mutableStateOf<String?>(null)
     var authErrorMessage by mutableStateOf("")
     var verificationMessage by mutableStateOf("")
         private set
@@ -110,6 +113,8 @@ class MGNotifyModel(private val app: Application) {
     var newNotificationIDs by mutableStateOf<Set<String>>(emptySet())
         private set
     private var markSeenJob: Job? = null
+    /** Emails opened this visit: seen, even if a reload started before that says otherwise. */
+    private var openedEmailIDs = emptySet<String>()
 
     val navigator = Navigator()
 
@@ -406,6 +411,7 @@ class MGNotifyModel(private val app: Application) {
         password = ""
         notifications = emptyList()
         newNotificationIDs = emptySet()
+        openedEmailIDs = emptySet()
         isAuthenticated = true
         accountVerificationFailed = false
         remoteSignOutNotice = false
@@ -502,6 +508,9 @@ class MGNotifyModel(private val app: Application) {
      * another signed-in account switch to it when opened, as on iOS.
      */
     suspend fun receiveNotification(payload: JSONObject?, openedByUser: Boolean = false): PushHandlingResult {
+        if (openedByUser && payload?.optBoolean("email") == true) {
+            emailNotificationToOpen = payload.optString("notification_id").takeIf { it.isNotEmpty() }
+        }
         val pushAccountID = payload?.optString("account_id")?.takeIf { it.isNotEmpty() }
         if (pushAccountID != null && accountID.isNotEmpty() && pushAccountID != accountID) {
             return receiveNotificationForOtherAccount(pushAccountID, payload, openedByUser)
@@ -627,7 +636,9 @@ class MGNotifyModel(private val app: Application) {
         runRequest {
             val response = send("/notifications", "GET", authenticated = true)
             val items = response.getJSONArray("notifications")
-            notifications = (0 until items.length()).map { AccountNotification.fromJson(items.getJSONObject(it)) }
+            notifications = (0 until items.length()).map { index ->
+                AccountNotification.fromJson(items.getJSONObject(index)).let { if (it.notificationID in openedEmailIDs) it.copy(seen = true) else it }
+            }
             newNotificationIDs = newNotificationIDs + notifications.filter { !it.seen }.map { it.notificationID }
         }
     }
@@ -971,10 +982,31 @@ class MGNotifyModel(private val app: Application) {
         }
     }
 
+    /**
+     * An email was opened: it counts as seen straight away, here and
+     * everywhere else, and loses its "New" marker.
+     */
+    fun markEmailSeen(notificationID: String) {
+        openedEmailIDs = openedEmailIDs + notificationID
+        newNotificationIDs = newNotificationIDs - notificationID
+        if (notifications.none { it.notificationID == notificationID && !it.seen }) return
+        notifications = notifications.map { if (it.notificationID == notificationID) it.copy(seen = true) else it }
+        scope.launch {
+            val body = JSONObject().put("notification_ids", JSONArray().put(notificationID))
+            runCatching { send("/notifications/mark-seen", "POST", body, authenticated = true) }
+        }
+    }
+
+    /** The list left the screen (an email opened over it, say): nothing more counts as seen. */
+    fun cancelMarkSeen() {
+        markSeenJob?.cancel()
+    }
+
     /** Leaving the app: next time, only notifications that are new by then are marked. */
     fun forgetNewMarkers() {
         markSeenJob?.cancel()
         newNotificationIDs = emptySet()
+        openedEmailIDs = emptySet()
     }
 
     /** Another signed-in account's email or display name changed. */

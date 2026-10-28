@@ -41,6 +41,8 @@ final class MGNotifyModel: NSObject, ObservableObject {
     @Published var devicesRefreshToken = UUID()
     @Published var apiKeysRefreshToken = UUID()
     @Published var notificationsRefreshToken = UUID()
+    /// An email notification the person tapped, opened once it's in the list.
+    @Published var emailNotificationToOpen: String?
     @Published var authErrorMessage = ""
     @Published var verificationMessage = ""
     /// The active account's optional display name; empty when it has none.
@@ -50,6 +52,8 @@ final class MGNotifyModel: NSObject, ObservableObject {
     /// Notifications that were unread when this visit to the app saw them: shown as "New" until the app is left.
     @Published private(set) var newNotificationIDs: Set<String> = []
     private var markSeenTask: Task<Void, Never>?
+    /// Emails opened this visit: seen, even if a reload started before that says otherwise.
+    private var openedEmailIDs: Set<String> = []
 
     private(set) var sessionToken = UserDefaults.standard.string(forKey: "sessionToken") ?? ""
     private(set) var accountID = UserDefaults.standard.string(forKey: "accountID") ?? ""
@@ -399,6 +403,7 @@ final class MGNotifyModel: NSObject, ObservableObject {
         password = ""
         notifications = []
         newNotificationIDs = []
+        openedEmailIDs = []
         isAuthenticated = true
         accountVerificationFailed = false
         remoteSignOutNotice = false
@@ -510,6 +515,12 @@ final class MGNotifyModel: NSObject, ObservableObject {
     }
 
     func receiveNotification(userInfo: [AnyHashable: Any], openedByUser: Bool = false) async -> PushHandlingResult {
+        if openedByUser,
+           let payload = userInfo["mg_notify"] as? [String: Any],
+           payload["email"] as? Bool == true,
+           let notificationID = payload["notification_id"] as? String, !notificationID.isEmpty {
+            emailNotificationToOpen = notificationID
+        }
         if let pushAccountID = pushAccountID(from: userInfo), !accountID.isEmpty, pushAccountID != accountID {
             return await receiveNotificationForOtherAccount(
                 accountID: pushAccountID,
@@ -670,8 +681,14 @@ final class MGNotifyModel: NSObject, ObservableObject {
                 method: "GET",
                 authenticated: true
             )
-            self.notifications = response.notifications
-            self.newNotificationIDs.formUnion(response.notifications.filter { !$0.seen }.map(\.notification_id))
+            self.notifications = response.notifications.map { notification in
+                var notification = notification
+                if self.openedEmailIDs.contains(notification.notification_id) {
+                    notification.seen = true
+                }
+                return notification
+            }
+            self.newNotificationIDs.formUnion(self.notifications.filter { !$0.seen }.map(\.notification_id))
         }
     }
 
@@ -1219,10 +1236,40 @@ final class MGNotifyModel: NSObject, ObservableObject {
         }
     }
 
+    /// An email was opened: it counts as seen straight away, here and
+    /// everywhere else, and loses its "New" marker.
+    func markEmailSeen(_ notificationID: String) {
+        openedEmailIDs.insert(notificationID)
+        newNotificationIDs.remove(notificationID)
+        guard let index = notifications.firstIndex(where: { $0.notification_id == notificationID }), !notifications[index].seen else {
+            return
+        }
+        notifications[index].seen = true
+        Task {
+            guard let response: MarkSeenResponse = try? await sendRequest(
+                path: "/notifications/mark-seen",
+                method: "POST",
+                body: MarkSeenRequest(notification_ids: [notificationID]),
+                authenticated: true
+            ) else {
+                return
+            }
+            if let badge = response.badge {
+                try? await UNUserNotificationCenter.current().setBadgeCount(badge)
+            }
+        }
+    }
+
+    /// The list left the screen (an email opened over it, say): nothing more counts as seen.
+    func cancelMarkSeen() {
+        markSeenTask?.cancel()
+    }
+
     /// Leaving the app: next time, only notifications that are new by then are marked.
     func forgetNewMarkers() {
         markSeenTask?.cancel()
         newNotificationIDs = []
+        openedEmailIDs = []
     }
 
     /// Another signed-in account's email or display name changed.
@@ -1773,7 +1820,10 @@ struct DeviceRegistrationRequest: Encodable {
     var badges = true
 }
 
-struct MarkSeenRequest: Encodable {}
+struct MarkSeenRequest: Encodable {
+    /// Only these; every unread notification when nil (left out of the JSON).
+    var notification_ids: [String]? = nil
+}
 
 struct MarkSeenResponse: Decodable {
     let marked: Int
@@ -2695,7 +2745,13 @@ struct ContentView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedEmailNotification) { notification in
             EmailNotificationDetailView(notification: notification)
+                .onAppear { model.markEmailSeen(notification.notification_id) }
         }
+        // A tapped email notification opens straight to the email, as soon
+        // as it's in the list (after switching account or loading, if need be).
+        .onAppear(perform: openTappedEmail)
+        .onReceive(model.$emailNotificationToOpen) { _ in DispatchQueue.main.async(execute: openTappedEmail) }
+        .onReceive(model.$notifications) { _ in DispatchQueue.main.async(execute: openTappedEmail) }
         .confirmationDialog(
             "Copy Notification",
             isPresented: Binding(
@@ -2750,8 +2806,25 @@ struct ContentView: View {
         .onChange(of: isNotificationListInView) { _, inView in
             if inView {
                 model.scheduleMarkSeen()
+            } else {
+                model.cancelMarkSeen()
             }
         }
+    }
+
+    private func openTappedEmail() {
+        guard
+            let id = model.emailNotificationToOpen,
+            let notification = model.notifications.first(where: { $0.notification_id == id })
+        else {
+            return
+        }
+        model.emailNotificationToOpen = nil
+        showingSettings = false
+        showingSounds = false
+        showingAddSounds = false
+        copyTargetNotification = nil
+        selectedEmailNotification = notification
     }
 
     /// The notification list is what's on screen (nothing pushed or presented over it).

@@ -171,7 +171,7 @@ urllib.request.urlopen(request)</code></pre>
         </ol>
         <p>The app keeps itself up to date: it checks for new versions about twice a day and offers to install them, and you can check yourself under Settings, About. The first time, Android asks you to let MG Notify install apps; each update still asks you to confirm.</p>
         <h3>Unread notifications and badges</h3>
-        <p>New notifications are marked <q>New</q> until you've seen them, in the apps and on this site. Opening your notifications on any device marks them seen everywhere. On iPhone and iPad, the app icon shows how many are unread, counting every account signed in on that device.</p>
+        <p>New notifications are marked <q>New</q> until you've seen them, in the apps and on this site. Opening your notifications on any device marks them seen everywhere, and opening an email marks that one seen straight away. Tapping an email's notification, in the apps or in your browser, opens the email itself. On iPhone and iPad, the app icon shows how many are unread, counting every account signed in on that device.</p>
         <h3>Several accounts on one device</h3>
         <p>In either app, open the account menu at the top of your notifications and choose Add Account. The device gets notifications for every account it's signed in to; tapping a notification switches to its account.</p>
     </section>
@@ -315,7 +315,7 @@ urllib.request.urlopen(request)</code></pre>
             <li>Your signed-in devices: their name, push address, last IP address and when they were last seen.</li>
             <li>Sign-ins and email links, stored only as one-way hashes.</li>
         </ul>
-        <p>Notifications are delivered through Apple (iPhone), Google (Android) or your browser's push service. Email is handled by Brevo. There's no advertising and no tracking. Backups are kept for 14 days. Deleting your account removes your data straight away; it leaves the backups within 14 days.</p>
+        <p>Notifications are delivered through Apple (iPhone), Google (Android) or your browser's push service. Email sent to your API key addresses comes straight to our server (Brevo receives it only as a backup, if our server can't be reached); email we send you, such as verification and password resets, goes through Brevo. There's no advertising and no tracking. Backups are kept for 14 days. Deleting your account removes your data straight away; it leaves the backups within 14 days.</p>
     </section>
 
     <section aria-labelledby="accessibility">

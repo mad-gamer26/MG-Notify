@@ -29,7 +29,13 @@ self.addEventListener("push", (event) => {
                 icon: "/assets/icon-192.png",
                 badge: "/assets/badge-96.png",
                 tag: info.notification_id || undefined,
-                data: { url: "/app.html#notifications", ...info },
+                data: {
+                    // An email opens straight to it.
+                    url: info.email && info.notification_id
+                        ? "/app.html?open=" + encodeURIComponent(info.notification_id) + "#notifications"
+                        : "/app.html#notifications",
+                    ...info,
+                },
             });
             for (const client of windows) {
                 client.postMessage({ type: "mg-notify-push", notification_id: info.notification_id });
@@ -40,13 +46,18 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const url = new URL((event.notification.data && event.notification.data.url) || "/app.html", self.location.origin).href;
+    const data = event.notification.data || {};
+    const url = new URL(data.url || "/app.html", self.location.origin).href;
     event.waitUntil(
         (async () => {
             for (const client of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
                 if (new URL(client.url).pathname === "/app.html") {
                     await client.focus();
-                    client.postMessage({ type: "mg-notify-push" });
+                    if (data.email && data.notification_id) {
+                        client.postMessage({ type: "mg-notify-open-email", notification_id: data.notification_id });
+                    } else {
+                        client.postMessage({ type: "mg-notify-push" });
+                    }
                     return;
                 }
             }

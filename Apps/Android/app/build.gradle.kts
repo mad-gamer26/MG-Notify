@@ -55,7 +55,7 @@ android {
         targetSdk = 37
         // versionName matches the iOS app's MARKETING_VERSION. versionCode goes up
         // with every Android release: the updater offers only a higher one.
-        versionCode = 2
+        versionCode = 3
         versionName = "2.0"
         buildConfigField("String", "SERVER_URL", "\"${project.property("mgNotifyServer")}\"")
         buildConfigField("String", "PORTAL_URL", "\"https://notify.mad-gamer.com\"")

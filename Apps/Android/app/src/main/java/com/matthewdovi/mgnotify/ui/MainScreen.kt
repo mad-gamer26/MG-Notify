@@ -61,6 +61,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -160,6 +161,15 @@ fun MGNotifyApp(model: MGNotifyModel) {
         if (target == SoundsNavigation.SOUNDS) model.reloadImportedSounds()
         navigator.push(if (target == SoundsNavigation.ADD_SOUNDS) Screen.AddSounds else Screen.Sounds)
     }
+    // A tapped email notification opens straight to the email, as soon as
+    // it's in the list (after switching account or loading, if need be).
+    LaunchedEffect(model.emailNotificationToOpen, model.notifications) {
+        val id = model.emailNotificationToOpen ?: return@LaunchedEffect
+        val notification = model.notifications.firstOrNull { it.notificationID == id } ?: return@LaunchedEffect
+        model.emailNotificationToOpen = null
+        navigator.reset()
+        navigator.push(Screen.EmailDetail(notification))
+    }
     BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.pop() }
 
     MGNotifyTheme {
@@ -177,7 +187,10 @@ fun MGNotifyApp(model: MGNotifyModel) {
                         Screen.Accounts -> AccountsScreen(model, navigator)
                         Screen.AccountSettings -> AccountSettingsScreen(model, navigator)
                         Screen.About -> AboutScreen(model, navigator)
-                        is Screen.EmailDetail -> EmailDetailScreen(top.notification, navigator)
+                        is Screen.EmailDetail -> {
+                            LaunchedEffect(top.notification.notificationID) { model.markEmailSeen(top.notification.notificationID) }
+                            EmailDetailScreen(top.notification, navigator)
+                        }
                     }
                 }
                 UpdateDialogs(model.updater)
@@ -454,6 +467,7 @@ private fun SignedInView(model: MGNotifyModel, navigator: Navigator) {
     // The list is on screen: what's unread here counts as seen.
     LaunchedEffect(model.notifications) { model.scheduleMarkSeen() }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.scheduleMarkSeen() }
+    DisposableEffect(Unit) { onDispose { model.cancelMarkSeen() } }
     LaunchedEffect(notifications.size) { if (notifications.isEmpty()) searchText = "" }
 
     LazyColumn(

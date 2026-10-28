@@ -8,7 +8,7 @@ single Rust binary (axum and tokio) that keeps everything in one SQLite file.
   Firebase Cloud Messaging, and browsers through Web Push. Each kind of
   delivery is optional; anything not configured is skipped.
 - **Sends with one request:** `GET` or `POST /notify` with an API key, or an
-  email to the key's address.
+  email to the key's address, received by the server's own SMTP receiver.
 - **Live updates:** open apps and websites hold a Server-Sent Events stream
   and see every change the moment it happens. Closed apps get silent pushes.
 - **No moving parts:** no external database, queue or cache. Back up one
@@ -51,7 +51,9 @@ against the folder the config file is in.
   "fcm":    { "project_id": "my-firebase-project", "service_account_path": "firebase-service-account.json" },
   "smtp":   { "host": "smtp.example.com", "port": 587, "username": "…", "password": "…",
               "from_email": "no-reply@example.com", "from_name": "MG Notify", "use_tls": true },
-  "web":    { "base_url": "https://notify.example.com" }
+  "web":    { "base_url": "https://notify.example.com" },
+  "inbound_email": { "domain": "notify.example.com", "smtp_bind_host": "127.0.0.1", "smtp_bind_port": "2525",
+                     "tls_cert_path": "tls/fullchain.pem", "tls_key_path": "tls/privkey.pem" }
 }
 ```
 
@@ -62,21 +64,37 @@ against the folder the config file is in.
 | `fcm` | Android pushes. Use a service account key for your Firebase project; the Android app must be built with the same project's `google-services.json`. |
 | `smtp` | Email verification and password-reset emails. Without it, new accounts can't verify their email, so they can't send notifications. |
 | `web` | The website's address, used for the links in those emails (`<base_url>/?action=verify&token=…`). |
+| `inbound_email` | Email notifications (below). `domain` is the part after the `@`. Leave `smtp_bind_port` empty to turn the SMTP receiver off. |
 
 Web Push needs no setup: the server makes its own VAPID key on first start
 and keeps it in the database.
 
 ### Email notifications (optional)
 
-Every API key also has an email address: the key followed by `@` and your
-inbound mail domain. Point that domain's mail at an inbound-email service
-that posts JSON to `POST /email/inbound`; the code expects
-[Brevo](https://www.brevo.com)'s inbound parsing webhook format. Put a random
-secret in a file called `brevo-webhook-secret` next to `config.json`, and have
-the webhook send it in the `X-MG-Notify-Webhook-Secret` header. Each email
-becomes a notification titled `Sender <address>: Subject`; the HTML body is
-sanitized and kept so the apps can show it. Repeated deliveries of the same
-message are ignored.
+Every API key also has an email address: the key followed by `@` and
+`inbound_email.domain`. Each email sent there becomes a notification titled
+`Sender <address>: Subject`; the HTML body is sanitized (no scripts, styles or
+tracking images) and kept so the apps can show it. Repeated deliveries of the
+same message are ignored.
+
+The server receives this mail itself, with a built-in SMTP receiver, so the
+notification goes out the moment the sender's mail server hands the email
+over:
+
+1. Set `inbound_email.smtp_bind_port` and point public port 25 at it. The
+   receiver accepts only `<API key>@<domain>` addresses of verified accounts,
+   so it can't be used to relay mail.
+2. Give it a certificate (`tls_cert_path`, `tls_key_path`) so senders can use
+   STARTTLS. The files are read for each connection, so a renewed certificate
+   is picked up without a restart.
+3. Add an MX record for the domain pointing at the server.
+
+An inbound-email service that posts JSON to `POST /email/inbound` works too.
+The code expects [Brevo](https://www.brevo.com)'s inbound parsing webhook
+format. Put a random secret in a file called `brevo-webhook-secret` next to
+`config.json`, and have the webhook send it in the `X-MG-Notify-Webhook-Secret`
+header. Such services add a delay of their own (Brevo's is around 20 seconds),
+so they work best as a lower-priority backup MX behind the built-in receiver.
 
 ## Data
 
@@ -167,6 +185,10 @@ TLS. `deploy/` has the nginx configuration used for notify.mad-gamer.com:
   files and proxies `/api/` to the server.
 - `mg-notify-site.conf`: the website's security headers (including its
   Content-Security-Policy) and the caching rules.
+- `mg-notify-smtp.conf`: an nginx `stream` server that passes public port 25
+  to the SMTP receiver, so the server doesn't need to run as root.
+- `mg-notify-cert.sh`: a certbot deploy hook that copies the certificate to
+  where the server's user can read it for STARTTLS.
 
 To upgrade, copy the new binary next to the old one, `mv` it into place and
 restart. The database schema upgrades itself on start.
@@ -192,6 +214,7 @@ Any change to the API should keep these passing.
 | `src/db.rs` | The SQLite schema, migrations and queries. |
 | `src/push.rs` | APNs, FCM and Web Push delivery. |
 | `src/events.rs` | The live event stream. |
-| `src/email.rs` | Outgoing email and inbound email notifications. |
+| `src/email.rs` | Outgoing email, and turning inbound email into notification text. |
+| `src/smtp.rs` | The built-in SMTP receiver for email notifications. |
 | `src/import.rs` | Importing the old Python server's JSON files. |
 | `src/util.rs` | Shared helpers: password hashing, tokens and validation. |

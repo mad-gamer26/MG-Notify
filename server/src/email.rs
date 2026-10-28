@@ -130,6 +130,9 @@ static SPACED_PAREN_URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\(\s+(h
 static MANY_NEWLINES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
 static PARAGRAPH_BREAK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\r?\n\s*\r?\n").unwrap());
 static PLAIN_URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)https?://[^\s<>]+").unwrap());
+/// Brevo's open-tracking image, whatever its size attributes.
+static BREVO_TRACKING_IMAGE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?i)<img\b[^>]*\bsrc\s*=\s*["']?https?://[^"'\s>]*\.sendibt\d+\.com/tr/op/[^>]*>"#).unwrap());
 static TRACKING_PIXEL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)<img\b[^>]*\b(?:width|height)\s*=\s*["']?\s*1\s*["']?[\s/>][^>]*>?"#).unwrap());
 
@@ -178,6 +181,7 @@ async fn restore_click_tracking(values: [String; 2]) -> [String; 2] {
 pub fn sanitize_email_html(value: &str) -> String {
     let input = truncate_chars(value, 200_000);
     let input = TRACKING_PIXEL.replace_all(&input, "");
+    let input = BREVO_TRACKING_IMAGE.replace_all(&input, "");
     let tags: HashSet<&str> = [
         "a", "b", "blockquote", "br", "code", "div", "em", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "ol",
         "p", "pre", "span", "strong", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
@@ -242,4 +246,15 @@ pub async fn email_content(item: &Value) -> (String, String) {
     let message = truncate_chars(if message.is_empty() { "(No message body)" } else { message }, 3000);
     let html = if raw_html.is_empty() { plain_text_to_html(&message) } else { sanitize_email_html(&raw_html) };
     (message, html)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tracking_images_are_removed() {
+        let html = r#"<img src="https://abc.r.af.d.sendibt2.com/tr/op/XYZ"> Hello <img src="https://example.com/logo.png" alt="Logo">"#;
+        assert_eq!(sanitize_email_html(html), r#"Hello <img src="https://example.com/logo.png" alt="Logo">"#);
+    }
 }

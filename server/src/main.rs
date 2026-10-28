@@ -13,6 +13,7 @@ mod email;
 mod events;
 mod import;
 mod push;
+mod smtp;
 mod util;
 
 use std::io::IsTerminal;
@@ -110,17 +111,31 @@ async fn serve(settings: config::Settings, db: db::Db) {
         std::process::exit(1);
     });
     tracing::info!("Starting MG Notify server on {address}");
+    tokio::spawn(smtp::run(state.clone()));
     let app = api::router(state).into_make_service_with_connect_info::<SocketAddr>();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("signal");
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {}
-                _ = terminate.recv() => {}
-            }
-        })
-        .await
-        .expect("server");
+    let (stop, mut stopping) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("signal");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminate.recv() => {}
+        }
+        let _ = stop.send(true);
+    });
+    let mut graceful = stopping.clone();
+    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+        let _ = graceful.wait_for(|stop| *stop).await;
+    });
+    // Open event streams never finish by themselves, so a graceful shutdown
+    // would wait for them forever: give requests in flight a moment, then
+    // stop. The apps and website reconnect on their own.
+    tokio::select! {
+        result = server => result.expect("server"),
+        _ = async {
+            let _ = stopping.wait_for(|stop| *stop).await;
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        } => tracing::info!("Stopped, closing open event streams"),
+    }
 }
 
 /// Once a day: forget sessions idle for 180 days, and snapshot the database

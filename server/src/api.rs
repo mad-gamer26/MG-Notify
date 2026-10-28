@@ -38,6 +38,11 @@ impl ApiError {
     fn new(status: u16, detail: impl Into<String>) -> Self {
         Self(StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Value::String(detail.into()))
     }
+
+    /// The error's message, for logs.
+    pub fn detail(&self) -> String {
+        self.1.as_str().map_or_else(|| self.1.to_string(), String::from)
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -847,67 +852,14 @@ async fn inbound_email(State(state): Shared, headers: HeaderMap, body: axum::bod
     };
     let (mut processed, mut duplicates, mut delivered, mut ignored) = (0, 0, 0, 0);
     for item in items.iter().filter(|item| item.is_object()) {
-        let mut message_id = item.get("MessageId").map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).unwrap_or_default();
-        message_id = message_id.trim().to_string();
-        if message_id.is_empty() || message_id == "null" {
-            use sha2::Digest;
-            message_id = format!("sha256:{}", hex::encode(sha2::Sha256::digest(canonical_json(item).as_bytes())));
-        }
-        if state.db.inbound_email_processed(&message_id)? {
+        let outcome = process_inbound_email(&state, item).await?;
+        if outcome.duplicate {
             duplicates += 1;
             continue;
         }
-        let (name, address) = email::sender_mailbox(item.get("From").unwrap_or(&Value::Null));
-        let name = email::single_line(&name, "Unknown sender", 160);
-        let address = email::single_line(&address, "unknown", 254);
-        let subject_text = match item.get("Subject") {
-            Some(Value::String(s)) => s.clone(),
-            None | Some(Value::Null) => String::new(),
-            Some(other) => other.to_string(),
-        };
-        let subject = email::single_line(&subject_text, "(no subject)", 300);
-        let title = format!("{name} <{address}>: {subject}");
-        let (message, html) = email::email_content(item).await;
-
-        let recipients = match item.get("Recipients").filter(|v| !is_empty_value(v)).or_else(|| item.get("To")) {
-            Some(Value::Array(list)) => list.clone(),
-            None | Some(Value::Null) => Vec::new(),
-            Some(single) => vec![single.clone()],
-        };
-        let mut delivered_to = HashSet::new();
-        for recipient in &recipients {
-            let address = email::mailbox_address(recipient);
-            let Some((local, domain)) = address.rsplit_once('@') else {
-                ignored += 1;
-                continue;
-            };
-            if !domain.eq_ignore_ascii_case("notify.mad-gamer.com") || local.is_empty() {
-                ignored += 1;
-                continue;
-            }
-            let Some(key) = state.db.api_key_ignoring_case(local)? else {
-                ignored += 1;
-                continue;
-            };
-            if delivered_to.contains(&key.account_id) {
-                ignored += 1;
-                continue;
-            }
-            match state.db.account_by_id(&key.account_id)? {
-                Some(account) if account.email_verified => {}
-                _ => {
-                    ignored += 1;
-                    continue;
-                }
-            }
-            state.db.touch_api_key(&key.key_id)?;
-            push::deliver_to_account(&state.db, &state.pusher, &state.hub, &key.account_id, &title, &message, "default", true, Some(html.clone()))
-                .await?;
-            delivered_to.insert(key.account_id.clone());
-            delivered += 1;
-        }
-        state.db.mark_inbound_email_processed(&message_id)?;
         processed += 1;
+        delivered += outcome.delivered;
+        ignored += outcome.ignored;
     }
     Ok(Json(json!({
         "status": "accepted",
@@ -916,6 +868,77 @@ async fn inbound_email(State(state): Shared, headers: HeaderMap, body: axum::bod
         "delivered_accounts": delivered,
         "ignored_recipients": ignored,
     })))
+}
+
+/// What became of one inbound email.
+pub struct InboundOutcome {
+    /// Already processed (same Message-ID): nothing was sent.
+    pub duplicate: bool,
+    pub delivered: usize,
+    pub ignored: usize,
+}
+
+/// The API key an inbound address names: `<key>@<inbound domain>`, case
+/// ignored, belonging to a verified account.
+pub fn inbound_recipient(state: &AppState, address: &str) -> Result<Option<crate::db::ApiKey>, ApiError> {
+    let Some((local, domain)) = address.trim().rsplit_once('@') else { return Ok(None) };
+    if !domain.eq_ignore_ascii_case(&state.settings.inbound_email_domain) || local.is_empty() {
+        return Ok(None);
+    }
+    let Some(key) = state.db.api_key_ignoring_case(local)? else { return Ok(None) };
+    Ok(match state.db.account_by_id(&key.account_id)? {
+        Some(account) if account.email_verified => Some(key),
+        _ => None,
+    })
+}
+
+/// Turns one inbound email (in the webhook's item format, which the SMTP
+/// receiver builds too) into a notification for each account it names.
+pub async fn process_inbound_email(state: &AppState, item: &Value) -> Result<InboundOutcome, ApiError> {
+    let mut message_id = item.get("MessageId").map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).unwrap_or_default();
+    message_id = message_id.trim().to_string();
+    if message_id.is_empty() || message_id == "null" {
+        use sha2::Digest;
+        message_id = format!("sha256:{}", hex::encode(sha2::Sha256::digest(canonical_json(item).as_bytes())));
+    }
+    if state.db.inbound_email_processed(&message_id)? {
+        return Ok(InboundOutcome { duplicate: true, delivered: 0, ignored: 0 });
+    }
+    let (name, address) = email::sender_mailbox(item.get("From").unwrap_or(&Value::Null));
+    let name = email::single_line(&name, "Unknown sender", 160);
+    let address = email::single_line(&address, "unknown", 254);
+    let subject_text = match item.get("Subject") {
+        Some(Value::String(s)) => s.clone(),
+        None | Some(Value::Null) => String::new(),
+        Some(other) => other.to_string(),
+    };
+    let subject = email::single_line(&subject_text, "(no subject)", 300);
+    let title = format!("{name} <{address}>: {subject}");
+    let (message, html) = email::email_content(item).await;
+
+    let recipients = match item.get("Recipients").filter(|v| !is_empty_value(v)).or_else(|| item.get("To")) {
+        Some(Value::Array(list)) => list.clone(),
+        None | Some(Value::Null) => Vec::new(),
+        Some(single) => vec![single.clone()],
+    };
+    let (mut delivered, mut ignored) = (0, 0);
+    let mut delivered_to = HashSet::new();
+    for recipient in &recipients {
+        let Some(key) = inbound_recipient(state, &email::mailbox_address(recipient))? else {
+            ignored += 1;
+            continue;
+        };
+        if !delivered_to.insert(key.account_id.clone()) {
+            ignored += 1;
+            continue;
+        }
+        state.db.touch_api_key(&key.key_id)?;
+        push::deliver_to_account(&state.db, &state.pusher, &state.hub, &key.account_id, &title, &message, "default", true, Some(html.clone()))
+            .await?;
+        delivered += 1;
+    }
+    state.db.mark_inbound_email_processed(&message_id)?;
+    Ok(InboundOutcome { duplicate: false, delivered, ignored })
 }
 
 fn is_empty_value(value: &Value) -> bool {
