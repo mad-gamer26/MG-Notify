@@ -66,10 +66,15 @@ object NotificationSounds {
         }
     }
 
-    fun isImportable(file: File): Boolean {
-        if (file.extension.lowercase() !in supportedExtensions) return false
-        val duration = durationMs(file) ?: return false
-        return duration <= MAX_DURATION_MS
+    fun isImportable(file: File): Boolean = importProblem(file) == null
+
+    /** Why [file] can't be a notification sound (worded as on iOS), or null if it can. */
+    fun importProblem(file: File): String? {
+        val unusable = "Not an audio file MG Notify can use"
+        if (file.extension.lowercase() !in supportedExtensions) return unusable
+        val duration = durationMs(file) ?: return unusable
+        if (duration > MAX_DURATION_MS) return "Longer than 30 seconds (${(duration + 500) / 1000} seconds)"
+        return null
     }
 
     /**

@@ -48,6 +48,8 @@ import com.matthewdovi.mgnotify.Navigator
 import com.matthewdovi.mgnotify.Screen
 import com.matthewdovi.mgnotify.NotificationSounds
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -184,12 +186,22 @@ fun SoundsScreen(model: MGNotifyModel, navigator: Navigator) {
 @Composable
 fun AddSoundsScreen(model: MGNotifyModel, navigator: Navigator) {
     var pendingSounds by remember { mutableStateOf<List<File>>(emptyList()) }
+    // Why each file can't be added, checked up front so nothing is skipped silently.
+    var problems by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var isAdding by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { pendingSounds = model.pendingSoundImports() }
-    val description = if (pendingSounds.size == 1) {
-        "You are about to add the following sound to MG Notify:"
-    } else {
-        "You are about to add the following ${pendingSounds.size} sounds to MG Notify:"
+    LaunchedEffect(Unit) {
+        val files = model.pendingSoundImports()
+        problems = withContext(Dispatchers.IO) {
+            files.mapNotNull { file -> NotificationSounds.importProblem(file)?.let { file.name to it } }.toMap()
+        }
+        pendingSounds = files
+    }
+    val addable = pendingSounds.count { it.name !in problems }
+    val description = when {
+        pendingSounds.isEmpty() -> "There are no sounds to add. Share audio files to MG Notify to add them here."
+        addable == 0 -> "None of these can be added to MG Notify:"
+        addable == 1 -> "You are about to add the following sound to MG Notify:"
+        else -> "You are about to add the following $addable sounds to MG Notify:"
     }
 
     Scaffold(
@@ -210,16 +222,20 @@ fun AddSoundsScreen(model: MGNotifyModel, navigator: Navigator) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 itemsIndexed(pendingSounds, key = { _, file -> file.name }) { index, file ->
                     Column(Modifier.fillMaxWidth()) {
-                        Text(NotificationSounds.displayName(file.name), modifier = Modifier.padding(vertical = 12.dp))
+                        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp).semantics(mergeDescendants = true) {}) {
+                            Text(NotificationSounds.displayName(file.name))
+                            problems[file.name]?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = secondaryText()) }
+                        }
                         if (index < pendingSounds.lastIndex) RowDivider()
                     }
                 }
             }
             Button(
                 onClick = {
-                    if (pendingSounds.isEmpty()) return@Button
+                    if (addable == 0) return@Button
                     isAdding = true
-                    val selectSingle = pendingSounds.size == 1
+                    // As on iOS: a sound added on its own becomes the notification sound.
+                    val selectSingle = addable == 1
                     model.launch {
                         model.addPendingSoundImports(selectSingleImportedSound = selectSingle)
                         pendingSounds = emptyList()
@@ -228,7 +244,7 @@ fun AddSoundsScreen(model: MGNotifyModel, navigator: Navigator) {
                         navigator.push(Screen.Sounds)
                     }
                 },
-                enabled = pendingSounds.isNotEmpty() && !isAdding,
+                enabled = addable > 0 && !isAdding,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Add")

@@ -850,22 +850,14 @@ final class MGNotifyModel: NSObject, ObservableObject {
         }
     }
 
+    /// Adds a sound (converted to CAF if iPhone can't play it as it is);
+    /// false if it's longer than 30 seconds or not audio iOS can read.
     func importSound(from url: URL) async throws -> Bool {
-        guard Self.supportedSoundExtensions.contains(url.pathExtension.lowercased()) else {
+        do {
+            _ = try await SoundLibrary.importSound(from: url)
+        } catch is SoundLibrary.ImportError {
             return false
         }
-        let asset = AVURLAsset(url: url)
-        let duration = try await asset.load(.duration)
-        guard duration.seconds <= 30 else {
-            return false
-        }
-        let destinationDirectory = ensureSoundsDirectory()
-        let destination = destinationDirectory.appending(path: url.lastPathComponent)
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-        try fileManager.copyItem(at: url, to: destination)
         reloadImportedSounds()
         return true
     }
@@ -999,13 +991,6 @@ final class MGNotifyModel: NSObject, ObservableObject {
         Self.sharedDefaults.set(false, forKey: "pendingOpenSounds")
         return shouldOpen
     }
-
-    private static let supportedSoundExtensions: Set<String> = [
-        "aiff",
-        "aif",
-        "wav",
-        "caf",
-    ]
 
     private func completeSignedInSetup() async {
         await ensurePushSetup()
@@ -2484,6 +2469,13 @@ struct ContentView: View {
                     model.reloadImportedSounds()
                     openAddSoundsIfPending()
                     openSoundsIfPending()
+                    // A sound shared to the share extension on its own became
+                    // the notification sound; tell the server.
+                    if model.consumePendingSelectedSoundSync() {
+                        Task {
+                            await model.saveSelectedSound()
+                        }
+                    }
                     Task {
                         await model.refreshServerAndSession()
                     }
@@ -3973,11 +3965,8 @@ struct SoundsView: View {
     @State private var showingDeleteAllSoundsConfirmation = false
     @State private var soundSearchText = ""
 
-    private static let supportedSoundTypes: [UTType] = [
-        .aiff,
-        .wav,
-        UTType(filenameExtension: "caf") ?? .audio,
-    ]
+    /// Anything iOS can read; it's converted if need be (see SoundLibrary).
+    private static let supportedSoundTypes: [UTType] = [.audio]
 
     private var options: [SoundOption] {
         model.soundOptions()

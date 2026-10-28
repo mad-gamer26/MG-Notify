@@ -6,6 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		56A100042FB0000000000001 /* MG Notify Share.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 56A100012FB0000000000001 /* MG Notify Share.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		56A100052FB0000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 34C8482E2FAF8B24002FF6B1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 56A100072FB0000000000001;
+			remoteInfo = "MG Notify Share";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		56A000092FB0000000000001 /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -13,6 +27,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				56A100042FB0000000000001 /* MG Notify Share.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -21,6 +36,7 @@
 
 /* Begin PBXFileReference section */
 		34C848362FAF8B24002FF6B1 /* MG Notify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MG Notify.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		56A100012FB0000000000001 /* MG Notify Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "MG Notify Share.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -29,10 +45,27 @@
 			path = "MG Notify";
 			sourceTree = "<group>";
 		};
+		56A100022FB0000000000001 /* MG Notify Share */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "MG Notify Share";
+			sourceTree = "<group>";
+		};
+		56A100032FB0000000000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		34C848332FAF8B24002FF6B1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		56A1000A2FB0000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +79,8 @@
 			isa = PBXGroup;
 			children = (
 				34C848382FAF8B24002FF6B1 /* MG Notify */,
+				56A100022FB0000000000001 /* MG Notify Share */,
+				56A100032FB0000000000001 /* Shared */,
 				34C848372FAF8B24002FF6B1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +89,7 @@
 			isa = PBXGroup;
 			children = (
 				34C848362FAF8B24002FF6B1 /* MG Notify.app */,
+				56A100012FB0000000000001 /* MG Notify Share.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,9 +109,11 @@
 			buildRules = (
 			);
 			dependencies = (
+				56A100062FB0000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				34C848382FAF8B24002FF6B1 /* MG Notify */,
+				56A100032FB0000000000001 /* Shared */,
 			);
 			name = "MG Notify";
 			packageProductDependencies = (
@@ -83,6 +121,29 @@
 			productName = "MG Notify";
 			productReference = 34C848362FAF8B24002FF6B1 /* MG Notify.app */;
 			productType = "com.apple.product-type.application";
+		};
+		56A100072FB0000000000001 /* MG Notify Share */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 56A100082FB0000000000001 /* Build configuration list for PBXNativeTarget "MG Notify Share" */;
+			buildPhases = (
+				56A100092FB0000000000001 /* Sources */,
+				56A1000A2FB0000000000001 /* Frameworks */,
+				56A1000B2FB0000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				56A100022FB0000000000001 /* MG Notify Share */,
+				56A100032FB0000000000001 /* Shared */,
+			);
+			name = "MG Notify Share";
+			packageProductDependencies = (
+			);
+			productName = "MG Notify Share";
+			productReference = 56A100012FB0000000000001 /* MG Notify Share.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -96,6 +157,9 @@
 				TargetAttributes = {
 					34C848352FAF8B24002FF6B1 = {
 						CreatedOnToolsVersion = 26.4.1;
+					};
+					56A100072FB0000000000001 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -114,12 +178,20 @@
 			projectRoot = "";
 			targets = (
 				34C848352FAF8B24002FF6B1 /* MG Notify */,
+				56A100072FB0000000000001 /* MG Notify Share */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		34C848342FAF8B24002FF6B1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		56A1000B2FB0000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -136,7 +208,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		56A100092FB0000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		56A100062FB0000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (ios, );
+			target = 56A100072FB0000000000001 /* MG Notify Share */;
+			targetProxy = 56A100052FB0000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		34C8483F2FAF8B24002FF6B1 /* Debug */ = {
@@ -262,7 +350,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "MG Notify/MG Notify.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 5NJK4F832Z;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -309,7 +397,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "MG Notify/MG Notify.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 5NJK4F832Z;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -349,6 +437,76 @@
 			};
 			name = Release;
 		};
+		56A1000C2FB0000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "MG Notify Share/MG Notify Share.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 5NJK4F832Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MG-Notify-Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MG Notify";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.matthewdovi.MG-Notify.Share";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		56A1000D2FB0000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "MG Notify Share/MG Notify Share.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 5NJK4F832Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MG-Notify-Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MG Notify";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.matthewdovi.MG-Notify.Share";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -366,6 +524,15 @@
 			buildConfigurations = (
 				34C848422FAF8B24002FF6B1 /* Debug */,
 				34C848432FAF8B24002FF6B1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		56A100082FB0000000000001 /* Build configuration list for PBXNativeTarget "MG Notify Share" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				56A1000C2FB0000000000001 /* Debug */,
+				56A1000D2FB0000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
