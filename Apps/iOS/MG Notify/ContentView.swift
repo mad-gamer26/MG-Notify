@@ -2447,6 +2447,9 @@ struct ContentView: View {
     @State private var showingClearNotificationsConfirmation = false
     @State private var notificationSearchText = ""
     @State private var showPassword = false
+    /// The app went to the background (not just covered by Control Center or
+    /// a banner), so its live connections were closed and need reopening.
+    @State private var wasInBackground = false
 
     var body: some View {
         NavigationStack {
@@ -2488,17 +2491,24 @@ struct ContentView: View {
                             await model.saveSelectedSound()
                         }
                     }
-                    Task {
-                        await model.refreshServerAndSession()
+                    // Back from the background: the connections were closed,
+                    // so reopen them and catch up on what they'd have brought.
+                    // Back from being briefly covered, they're still open.
+                    if wasInBackground {
+                        wasInBackground = false
+                        Task {
+                            await model.refreshServerAndSession()
+                            model.devicesRefreshToken = UUID()
+                            model.apiKeysRefreshToken = UUID()
+                        }
                     }
                     if isNotificationListInView {
                         model.scheduleMarkSeen(syncBadge: true)
                     }
-                } else {
+                } else if newPhase == .background {
+                    wasInBackground = true
                     model.stopLiveUpdates()
-                    if newPhase == .background {
-                        model.forgetNewMarkers()
-                    }
+                    model.forgetNewMarkers()
                 }
             }
             .onChange(of: model.hasInternetConnection) { _, hasInternetConnection in
