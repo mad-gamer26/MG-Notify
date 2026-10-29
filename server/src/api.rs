@@ -60,18 +60,36 @@ impl From<rusqlite::Error> for ApiError {
 
 type ApiResult = Result<Json<Value>, ApiError>;
 
-/// A JSON body; anything that doesn't fit is a 422 with a readable message.
+/// A JSON body, or an HTML-form one (`application/x-www-form-urlencoded`,
+/// as browsers and many scripts send), read as the same fields with text
+/// values. Anything that doesn't fit is a 422 with a readable message.
 pub struct Body<T>(T);
 
 impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for Body<T> {
     type Rejection = ApiError;
 
     async fn from_request(request: Request, state: &S) -> Result<Self, ApiError> {
+        let is_form = request
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/x-www-form-urlencoded"));
         let bytes = axum::body::Bytes::from_request(request, state)
             .await
             .map_err(|_| ApiError::new(422, "The request body could not be read."))?;
-        serde_json::from_slice(&bytes).map(Body).map_err(|error| ApiError::new(422, describe_json_error(&error)))
+        let parsed = if is_form {
+            serde_json::from_value(Value::Object(form_fields(&bytes)))
+        } else {
+            serde_json::from_slice(&bytes)
+        };
+        parsed.map(Body).map_err(|error| ApiError::new(422, describe_json_error(&error)))
     }
+}
+
+/// `a=1&b=2` as `{"a": "1", "b": "2"}`, for body and query parameters alike.
+fn form_fields(text: &[u8]) -> serde_json::Map<String, Value> {
+    url::form_urlencoded::parse(text).map(|(k, v)| (k.into_owned(), Value::String(v.into_owned()))).collect()
 }
 
 fn describe_json_error(error: &serde_json::Error) -> String {
@@ -96,9 +114,7 @@ impl<S: Send + Sync, T: DeserializeOwned> FromRequestParts<S> for QueryParams<T>
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, ApiError> {
         let query = parts.uri.query().unwrap_or("");
-        let pairs: serde_json::Map<String, Value> =
-            url::form_urlencoded::parse(query.as_bytes()).map(|(k, v)| (k.into_owned(), Value::String(v.into_owned()))).collect();
-        serde_json::from_value(Value::Object(pairs))
+        serde_json::from_value(Value::Object(form_fields(query.as_bytes())))
             .map(QueryParams)
             .map_err(|error| ApiError::new(422, describe_json_error(&error)))
     }

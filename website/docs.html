@@ -81,7 +81,7 @@
                 </tbody>
             </table>
         </div>
-        <p>You can also <code>POST</code> the same fields as JSON to the same address, which keeps your key out of web server logs and handles long messages better:</p>
+        <p>You can also <code>POST</code> the same fields to the same address, as JSON or as an HTML form (<code>application/x-www-form-urlencoded</code>). That keeps your key out of web server logs and handles long messages better:</p>
         <pre tabindex="0"><code>POST https://notify.mad-gamer.com/api/notify
 Content-Type: application/json
 
@@ -221,7 +221,7 @@ urllib.request.urlopen(request)</code></pre>
 
     <section aria-labelledby="api">
         <h2 id="api">API reference</h2>
-        <p>The apps and this site use the same API, at <code>https://notify.mad-gamer.com/api</code>. It takes and returns JSON. Requests marked <q>session</q> need an <code>Authorization: Bearer SESSION_TOKEN</code> header, where the token comes from signing in; <q>verified</q> also needs a verified email address. To just send notifications, all you need is <a href="#sending">/notify</a> and an API key.</p>
+        <p>The apps and this site use the same API, at <code>https://notify.mad-gamer.com/api</code>. It returns JSON, and takes JSON or HTML-form bodies. Requests marked <q>session</q> need an <code>Authorization: Bearer SESSION_TOKEN</code> header, where the token comes from signing in; <q>verified</q> also needs a verified email address. To just send notifications, all you need is <a href="#sending">/notify</a> and an API key.</p>
         <div class="table-wrap">
             <table>
                 <caption class="visually-hidden">API endpoints</caption>

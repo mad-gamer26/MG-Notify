@@ -119,7 +119,7 @@ Notification history is kept until the person deletes it.
 ## API
 
 The website's [documentation](https://notify.mad-gamer.com/docs.html) covers
-sending notifications. Every request and response is JSON. Errors look like
+sending notifications. Responses are JSON; request bodies can be JSON or an HTML form (`application/x-www-form-urlencoded`, read as text fields). Errors look like
 `{"detail": "Invalid API key"}` with a matching status code, and invalid input
 gets a `422` with a readable message.
 

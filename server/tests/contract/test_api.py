@@ -38,6 +38,18 @@ def request(method, path, body=None, token=None, headers=None):
         return error.code, json.loads(error.read() or b"null")
 
 
+def form_request(path, fields):
+    """A POST with an HTML-form body, as PowerCom sends."""
+    data = urllib.parse.urlencode(fields).encode()
+    req = urllib.request.Request(BASE_URL + path, data=data, method="POST",
+                                 headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "PowerCom"})
+    try:
+        with urllib.request.urlopen(req) as response:
+            return response.status, json.loads(response.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"null")
+
+
 def unique_email(prefix="user"):
     return f"{prefix}-{uuid.uuid4().hex[:10]}@example.com"
 
@@ -263,6 +275,28 @@ class NotificationTests(ContractTest):
         email = unique_email()
         self.expect(request("POST", "/account/change-email", {"new_email": email, "password": "password123"}, token), 200)
         self.expect(self.notify(key), 401, "Invalid API key")
+
+    def test_notify_form_post(self):
+        # As PowerCom and HTML forms send it: a form-encoded POST, not JSON.
+        _, token, _ = self.register()
+        key = self.api_key(token)["api_key"]
+        body = self.expect(form_request("/notify", {"key": key, "msg": "From a form", "title": "PowerCom"}), 200)
+        self.assertEqual((body["status"], body["title"], body["message"]), ("sent", "PowerCom", "From a form"))
+        latest = self.expect(request("GET", "/notifications", token=token), 200)["notifications"][0]
+        self.assertEqual((latest["title"], latest["message"]), ("PowerCom", "From a form"))
+        self.expect(form_request("/notify", {"key": key}), 422, "msg is required")
+        self.expect(form_request("/notify", {"key": "mgkey_nope", "msg": "Hi"}), 401, "Invalid API key")
+
+    def test_form_bodies_work_everywhere(self):
+        email, _, _ = self.register()
+        body = self.expect(form_request("/auth/login", {"email": email, "password": "password123"}), 200)
+        self.assertTrue(body["session"]["session_token"])
+        req = urllib.request.Request(BASE_URL + "/notify", data=b"{not json", method="POST", headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req)
+            self.fail("bad JSON was accepted")
+        except urllib.error.HTTPError as error:
+            self.assertEqual((error.code, json.loads(error.read())), (422, {"detail": "The request body must be JSON."}))
 
     def test_account_notify(self):
         _, token, _ = self.register()
