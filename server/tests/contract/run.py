@@ -19,6 +19,7 @@ import unittest
 import urllib.request
 
 import mail_sink
+import test_admin
 import test_api
 
 
@@ -39,6 +40,7 @@ def main():
     sink = mail_sink.MailSink()
     port = free_port()
     smtp_port = None if args.python_server else free_port()
+    admin_port = None if args.python_server else free_port()
     workdir = pathlib.Path(tempfile.mkdtemp(prefix="mgn-contract-"))
     (workdir / "config.json").write_text(json.dumps({
         "server": {"data_dir": "./data", "bind_host": "127.0.0.1", "bind_port": str(port), "log_level": "WARNING"},
@@ -49,6 +51,7 @@ def main():
         "web": {"base_url": "https://notify.example.com"},
         "inbound_email": {"domain": "notify.mad-gamer.com", "smtp_bind_host": "127.0.0.1",
                           "smtp_bind_port": str(smtp_port or "")},
+        "admin": {"bind_host": "127.0.0.1", "bind_port": str(admin_port or "")},
     }))
     (workdir / "brevo-webhook-secret").write_text(test_api.WEBHOOK_SECRET)
     if args.python_server:
@@ -74,7 +77,12 @@ def main():
         loader = unittest.TestLoader()
         if args.pattern:
             loader.testNamePatterns = [f"*{args.pattern}*"]
-        result = unittest.TextTestRunner(verbosity=2).run(loader.loadTestsFromModule(test_api))
+        suite = loader.loadTestsFromModule(test_api)
+        if admin_port:
+            # The Rust server's admin page.
+            test_admin.ADMIN_URL = f"http://127.0.0.1:{admin_port}"
+            suite.addTests(loader.loadTestsFromModule(test_admin))
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
         sys.exit(0 if result.wasSuccessful() else 1)
     finally:
         server.terminate()

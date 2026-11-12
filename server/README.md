@@ -65,6 +65,7 @@ against the folder the config file is in.
 | `smtp` | Email verification and password-reset emails. Without it, new accounts can't verify their email, so they can't send notifications. |
 | `web` | The website's address, used for the links in those emails (`<base_url>/?action=verify&token=…`). |
 | `inbound_email` | Email notifications (below). `domain` is the part after the `@`. Leave `smtp_bind_port` empty to turn the SMTP receiver off. |
+| `admin` | The admin page (below). Optional: without it the page runs on `127.0.0.1:5001`. |
 
 Web Push needs no setup: the server makes its own VAPID key on first start
 and keeps it in the database.
@@ -95,6 +96,28 @@ format. Put a random secret in a file called `brevo-webhook-secret` next to
 `config.json`, and have the webhook send it in the `X-MG-Notify-Webhook-Secret`
 header. Such services add a delay of their own (Brevo's is around 20 seconds),
 so they work best as a lower-priority backup MX behind the built-in receiver.
+
+### The admin page
+
+The server has an admin page on its own listener, never the public one:
+accounts (create, verify, email, display name, password, sign out, delete),
+each account's devices, sign-ins, API keys and notifications, a test send
+to its devices, the apps that have the live connection open, the settings
+(secrets hidden) and the recent log. By default only the server itself can
+open it, at `http://127.0.0.1:5001/`; reach it from elsewhere through an SSH
+tunnel (`ssh -L 5001:127.0.0.1:5001 your-server`) or a VPN with a reverse
+proxy that admits only it.
+
+```json
+"admin": { "enabled": true, "bind_host": "127.0.0.1", "bind_port": "5001", "password_hash": "" }
+```
+
+To listen on another address it needs a password: run
+`mg-notify-server --admin-password`, type one, and put the printed
+`password_hash` in the `admin` section. Browsers then ask for it (any user
+name). The server refuses to start with a non-local `bind_host` and no
+password. Every change made on the page is logged with the address it came
+from (`admin: ...` lines), whatever `log_level` is.
 
 ## Data
 
@@ -205,7 +228,10 @@ touched:
     cargo build
     python3 tests/contract/run.py --command target/debug/mg-notify-server
 
-Any change to the API should keep these passing.
+Any change to the API should keep these passing. With the Rust server they
+also run `tests/contract/test_admin.py` against the admin page.
+`tests/admin_ui_test.py` clicks through the admin page in a browser
+(Playwright) against a throwaway server; see its docstring.
 
 ## Source layout
 
@@ -216,7 +242,9 @@ Any change to the API should keep these passing.
 | `src/api.rs` | Every HTTP route. |
 | `src/db.rs` | The SQLite schema, migrations and queries. |
 | `src/push.rs` | APNs, FCM and Web Push delivery. |
-| `src/events.rs` | The live event stream. |
+| `src/events.rs` | The live event stream, and which apps have it open. |
+| `src/admin.rs` | The admin page's routes; the page itself is in `admin/`. |
+| `src/logbuf.rs` | The recent log lines the admin page shows. |
 | `src/email.rs` | Outgoing email, and turning inbound email into notification text. |
 | `src/smtp.rs` | The built-in SMTP receiver for email notifications. |
 | `src/import.rs` | Importing the old Python server's JSON files. |

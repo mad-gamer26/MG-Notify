@@ -750,6 +750,98 @@ impl Db {
         Ok(())
     }
 
+    // For the admin page
+
+    /// Every account with its counts, sorted by email.
+    pub fn admin_accounts(&self) -> DbResult<Vec<Value>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT a.account_id, a.email, a.email_verified, a.display_name, a.created_at,
+                    (SELECT COUNT(*) FROM devices d WHERE d.account_id = a.account_id),
+                    (SELECT COUNT(*) FROM api_keys k WHERE k.account_id = a.account_id),
+                    (SELECT COUNT(*) FROM notifications n WHERE n.account_id = a.account_id),
+                    (SELECT COUNT(*) FROM sessions s WHERE s.account_id = a.account_id),
+                    (SELECT MAX(s.last_used_at) FROM sessions s WHERE s.account_id = a.account_id)
+             FROM accounts a ORDER BY a.email COLLATE NOCASE",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok(json!({
+                    "account_id": row.get::<_, String>(0)?,
+                    "email": row.get::<_, String>(1)?,
+                    "email_verified": row.get::<_, bool>(2)?,
+                    "display_name": row.get::<_, Option<String>>(3)?,
+                    "created_at": row.get::<_, String>(4)?,
+                    "devices": row.get::<_, i64>(5)?,
+                    "api_keys": row.get::<_, i64>(6)?,
+                    "notifications": row.get::<_, i64>(7)?,
+                    "sessions": row.get::<_, i64>(8)?,
+                    "last_active": row.get::<_, Option<String>>(9)?,
+                }))
+            })?
+            .collect()
+    }
+
+    /// An account's sign-ins, named by the start of their hash.
+    pub fn admin_sessions(&self, account_id: &str) -> DbResult<Vec<Value>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT substr(token_hash, 1, 16), device_id, created_at, last_used_at FROM sessions
+             WHERE account_id = ?1 ORDER BY last_used_at DESC",
+        )?;
+        statement
+            .query_map([account_id], |row| {
+                Ok(json!({
+                    "id": row.get::<_, String>(0)?,
+                    "device_id": row.get::<_, Option<String>>(1)?,
+                    "created_at": row.get::<_, String>(2)?,
+                    "last_used_at": row.get::<_, String>(3)?,
+                }))
+            })?
+            .collect()
+    }
+
+    /// Ends one sign-in by its id from `admin_sessions`; returns its full
+    /// hash (for closing its event stream).
+    pub fn admin_delete_session(&self, account_id: &str, id: &str) -> DbResult<Option<String>> {
+        if id.len() != 16 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        let conn = self.conn();
+        let hash: Option<String> = conn
+            .query_row(
+                "SELECT token_hash FROM sessions WHERE account_id = ?1 AND substr(token_hash, 1, 16) = ?2",
+                params![account_id, id.to_ascii_lowercase()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(h) = &hash {
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?1", [h])?;
+        }
+        Ok(hash)
+    }
+
+    /// Server-wide counts for the admin page's overview.
+    pub fn admin_counts(&self) -> DbResult<Value> {
+        let conn = self.conn();
+        let day_ago = crate::util::iso_after(-24 * 3600);
+        let count = |sql: &str| -> rusqlite::Result<i64> { conn.query_row(sql, [], |row| row.get(0)) };
+        let since = |sql: &str| -> rusqlite::Result<i64> { conn.query_row(sql, [&day_ago], |row| row.get(0)) };
+        Ok(json!({
+            "accounts": count("SELECT COUNT(*) FROM accounts")?,
+            "verified": count("SELECT COUNT(*) FROM accounts WHERE email_verified = 1")?,
+            "devices": count("SELECT COUNT(*) FROM devices")?,
+            "iphones": count("SELECT COUNT(*) FROM devices WHERE lower(platform) NOT IN ('android', 'web')")?,
+            "androids": count("SELECT COUNT(*) FROM devices WHERE lower(platform) = 'android'")?,
+            "browsers": count("SELECT COUNT(*) FROM devices WHERE lower(platform) = 'web'")?,
+            "api_keys": count("SELECT COUNT(*) FROM api_keys")?,
+            "sessions": count("SELECT COUNT(*) FROM sessions")?,
+            "notifications": count("SELECT COUNT(*) FROM notifications")?,
+            "notifications_day": since("SELECT COUNT(*) FROM notifications WHERE created_at >= ?1")?,
+            "failed_day": since("SELECT COUNT(*) FROM notifications WHERE created_at >= ?1 AND status = 'failed'")?,
+        }))
+    }
+
     /// Writes a consistent copy of the whole database to `path`.
     pub fn snapshot(&self, path: &Path) -> DbResult<()> {
         self.conn().execute("VACUUM INTO ?1", [path.to_string_lossy()])?;

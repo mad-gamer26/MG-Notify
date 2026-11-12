@@ -3,15 +3,18 @@
 //!     mg-notify-server [--config PATH]               run the server
 //!     mg-notify-server --configure [--config PATH]   edit config.json interactively
 //!     mg-notify-server import FOLDER [--config PATH] load the Python server's JSON files
+//!     mg-notify-server --admin-password              make a hash for the admin page's password
 //!
 //! The config defaults to config.json in the current folder.
 
+mod admin;
 mod api;
 mod config;
 mod db;
 mod email;
 mod events;
 mod import;
+mod logbuf;
 mod push;
 mod smtp;
 mod util;
@@ -41,6 +44,10 @@ fn main() {
             "--config" => config_path = args.next().map(PathBuf::from).unwrap_or_else(|| usage()),
             "-c" | "--configure" => configure = true,
             "import" => import_from = Some(args.next().map(PathBuf::from).unwrap_or_else(|| usage())),
+            "--admin-password" => {
+                admin_password();
+                return;
+            }
             "-h" | "--help" => {
                 println!("usage: mg-notify-server [--config PATH] [--configure | import FOLDER]");
                 return;
@@ -73,10 +80,17 @@ fn main() {
         "DEBUG" => "debug",
         _ => "info",
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(format!("mg_notify_server={filter},warn"))
-        .with_ansi(std::io::stdout().is_terminal())
-        .init();
+    {
+        use tracing_subscriber::layer::SubscriberExt as _;
+        use tracing_subscriber::util::SubscriberInitExt as _;
+        tracing_subscriber::registry()
+            // Admin actions are always recorded, whatever the log level.
+            .with(tracing_subscriber::EnvFilter::new(format!("mg_notify_server={filter},mg_notify_server::admin=info,warn")))
+            .with(tracing_subscriber::fmt::layer().with_ansi(std::io::stdout().is_terminal()))
+            // The admin page's copy of the recent lines.
+            .with(logbuf::BufferLayer)
+            .init();
+    }
 
     if let Err(error) = std::fs::create_dir_all(&settings.data_dir) {
         eprintln!("Cannot create {}: {error}", settings.data_dir.display());
@@ -99,6 +113,22 @@ fn main() {
     tokio::runtime::Runtime::new().expect("tokio runtime").block_on(serve(settings, db));
 }
 
+/// `--admin-password`: reads a password and prints the hash for config.json.
+fn admin_password() {
+    use std::io::BufRead as _;
+    eprint!("Admin page password (at least 10 characters), then Enter: ");
+    let mut line = String::new();
+    let _ = std::io::stdin().lock().read_line(&mut line);
+    let password = line.trim_end_matches(['\r', '\n']);
+    if password.chars().count() < 10 {
+        eprintln!("The password must be at least 10 characters long.");
+        std::process::exit(1);
+    }
+    let (hash, _) = util::hash_password(password);
+    println!("Put this in the \"admin\" section of config.json, then restart the server:");
+    println!("\"password_hash\": \"{hash}\"");
+}
+
 async fn serve(settings: config::Settings, db: db::Db) {
     let db = Arc::new(db);
     let pusher = Arc::new(push::Pusher::new(&settings, &db));
@@ -112,6 +142,21 @@ async fn serve(settings: config::Settings, db: db::Db) {
     });
     tracing::info!("Starting MG Notify server on {address}");
     tokio::spawn(smtp::run(state.clone()));
+    if state.settings.admin_enabled {
+        let admin_address = format!("{}:{}", state.settings.admin_bind_host, state.settings.admin_bind_port);
+        let admin_listener = tokio::net::TcpListener::bind(&admin_address).await.unwrap_or_else(|error| {
+            eprintln!("Cannot listen on {admin_address} for the admin page: {error}");
+            std::process::exit(1);
+        });
+        let protected = if state.settings.admin_password_hash.is_some() { "password set" } else { "no password; this machine only" };
+        tracing::info!("Admin page on http://{admin_address}/ ({protected})");
+        let admin = admin::router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
+        tokio::spawn(async move {
+            if let Err(error) = axum::serve(admin_listener, admin).await {
+                tracing::error!("The admin page stopped: {error}");
+            }
+        });
+    }
     let app = api::router(state).into_make_service_with_connect_info::<SocketAddr>();
     let (stop, mut stopping) = tokio::sync::watch::channel(false);
     tokio::spawn(async move {

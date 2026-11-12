@@ -33,6 +33,10 @@ pub struct ConfigValues {
     pub inbound_smtp_hostname: String,
     pub inbound_smtp_tls_cert_path: String,
     pub inbound_smtp_tls_key_path: String,
+    pub admin_enabled: String,
+    pub admin_bind_host: String,
+    pub admin_bind_port: String,
+    pub admin_password_hash: String,
 }
 
 impl Default for ConfigValues {
@@ -62,6 +66,10 @@ impl Default for ConfigValues {
             inbound_smtp_hostname: String::new(),
             inbound_smtp_tls_cert_path: String::new(),
             inbound_smtp_tls_key_path: String::new(),
+            admin_enabled: "true".into(),
+            admin_bind_host: "127.0.0.1".into(),
+            admin_bind_port: "5001".into(),
+            admin_password_hash: String::new(),
         }
     }
 }
@@ -98,6 +106,12 @@ pub struct Settings {
     /// A certificate and key for STARTTLS; without them mail arrives unencrypted.
     pub inbound_smtp_tls_cert_path: Option<PathBuf>,
     pub inbound_smtp_tls_key_path: Option<PathBuf>,
+    /// The admin page's own listener (`admin` in config.json): this machine
+    /// only unless `admin.password_hash` is set.
+    pub admin_enabled: bool,
+    pub admin_bind_host: String,
+    pub admin_bind_port: u16,
+    pub admin_password_hash: Option<String>,
 }
 
 impl Settings {
@@ -136,6 +150,7 @@ pub fn load_values(path: &Path) -> Result<ConfigValues, String> {
     let section = |name: &str| payload.get(name);
     let (server, apns, fcm, smtp, web) = (section("server"), section("apns"), section("fcm"), section("smtp"), section("web"));
     let inbound = section("inbound_email");
+    let admin = section("admin");
     let d = &defaults;
     Ok(ConfigValues {
         data_dir: get_str(server, "data_dir", &d.data_dir),
@@ -162,6 +177,10 @@ pub fn load_values(path: &Path) -> Result<ConfigValues, String> {
         inbound_smtp_hostname: get_str(inbound, "smtp_hostname", ""),
         inbound_smtp_tls_cert_path: get_str(inbound, "tls_cert_path", ""),
         inbound_smtp_tls_key_path: get_str(inbound, "tls_key_path", ""),
+        admin_enabled: get_scalar(admin, "enabled", &d.admin_enabled),
+        admin_bind_host: get_str(admin, "bind_host", &d.admin_bind_host),
+        admin_bind_port: get_scalar(admin, "bind_port", &d.admin_bind_port),
+        admin_password_hash: get_str(admin, "password_hash", ""),
     })
 }
 
@@ -236,8 +255,31 @@ pub fn to_settings(path: &Path, v: &ConfigValues) -> Result<Settings, String> {
             .unwrap_or_else(|| v.inbound_email_domain.trim().to_lowercase()),
         inbound_smtp_tls_cert_path: optional(&v.inbound_smtp_tls_cert_path).map(|p| resolve(&dir, &p)),
         inbound_smtp_tls_key_path: optional(&v.inbound_smtp_tls_key_path).map(|p| resolve(&dir, &p)),
+        admin_enabled: parse_bool(&v.admin_enabled, "admin.enabled")?,
+        admin_bind_host: required(&v.admin_bind_host, "admin.bind_host")?,
+        admin_bind_port: parse_port(&v.admin_bind_port, "admin.bind_port")?,
+        admin_password_hash: check_admin(v)?,
         config_dir: dir,
     })
+}
+
+/// The admin page listens on this machine only, unless it has a password.
+fn check_admin(v: &ConfigValues) -> Result<Option<String>, String> {
+    let hash = optional(&v.admin_password_hash);
+    if let Some(h) = &hash
+        && !h.starts_with("$argon2")
+    {
+        return Err("admin.password_hash must be a hash from `mg-notify-server --admin-password`".into());
+    }
+    let enabled = parse_bool(&v.admin_enabled, "admin.enabled")?;
+    let host = v.admin_bind_host.trim();
+    let loopback = host == "localhost" || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    if enabled && !loopback && hash.is_none() {
+        return Err(format!(
+            "admin.bind_host {host} is reachable from other machines, so admin.password_hash is required (make one with `mg-notify-server --admin-password`), or use 127.0.0.1"
+        ));
+    }
+    Ok(hash)
 }
 
 pub fn load(path: &Path) -> Result<Settings, String> {
@@ -258,6 +300,10 @@ pub fn write_values(path: &Path, v: &ConfigValues) -> std::io::Result<()> {
             "domain": v.inbound_email_domain, "smtp_bind_host": v.inbound_smtp_bind_host,
             "smtp_bind_port": v.inbound_smtp_bind_port, "smtp_hostname": v.inbound_smtp_hostname,
             "tls_cert_path": v.inbound_smtp_tls_cert_path, "tls_key_path": v.inbound_smtp_tls_key_path,
+        },
+        "admin": {
+            "enabled": v.admin_enabled, "bind_host": v.admin_bind_host, "bind_port": v.admin_bind_port,
+            "password_hash": v.admin_password_hash,
         },
     });
     if let Some(parent) = path.parent() {
@@ -326,8 +372,52 @@ pub fn run_configure(path: &Path, existing_error: Option<&str>) -> Result<(), St
     v.inbound_smtp_hostname = ask("Inbound SMTP host name", &v.inbound_smtp_hostname, true, &any);
     v.inbound_smtp_tls_cert_path = ask("Inbound SMTP TLS certificate path", &v.inbound_smtp_tls_cert_path, true, &any);
     v.inbound_smtp_tls_key_path = ask("Inbound SMTP TLS key path", &v.inbound_smtp_tls_key_path, true, &any);
+    v.admin_enabled = ask("Admin page on", &v.admin_enabled, false, &|s| parse_bool(s, "admin.enabled").map(|b| b.to_string()));
+    v.admin_bind_host = ask("Admin page bind host (127.0.0.1: this machine only)", &v.admin_bind_host, false, &|s| required(s, "admin.bind_host"));
+    v.admin_bind_port = ask("Admin page port", &v.admin_bind_port, false, &|s| parse_port(s, "admin.bind_port").map(|p| p.to_string()));
     write_values(path, &v).map_err(|e| e.to_string())?;
     load(path)?;
     println!("Saved configuration to {}", path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with_admin(host: &str, hash: &str, enabled: &str) -> Result<Settings, String> {
+        let v = ConfigValues {
+            admin_bind_host: host.into(),
+            admin_password_hash: hash.into(),
+            admin_enabled: enabled.into(),
+            ..ConfigValues::default()
+        };
+        to_settings(Path::new("config.json"), &v)
+    }
+
+    #[test]
+    fn the_admin_page_needs_a_password_to_listen_elsewhere() {
+        let s = with_admin("127.0.0.1", "", "true").unwrap();
+        assert_eq!((s.admin_bind_host.as_str(), s.admin_bind_port, s.admin_password_hash), ("127.0.0.1", 5001, None));
+        assert!(with_admin("localhost", "", "true").is_ok());
+        assert!(with_admin("::1", "", "true").is_ok());
+        let e = with_admin("0.0.0.0", "", "true").unwrap_err();
+        assert!(e.contains("password_hash"), "{e}");
+        let (hash, _) = crate::util::hash_password("admin password 1");
+        assert!(with_admin("0.0.0.0", &hash, "true").is_ok());
+        assert!(with_admin("0.0.0.0", "", "false").is_ok(), "off needs nothing");
+        assert!(with_admin("127.0.0.1", "plain text", "true").is_err());
+    }
+
+    #[test]
+    fn an_old_config_without_admin_gets_the_defaults() {
+        let dir = std::env::temp_dir().join(format!("mgn-config-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        std::fs::write(&path, r#"{"server": {"bind_port": "5000"}}"#).unwrap();
+        let s = load(&path).unwrap();
+        assert!(s.admin_enabled);
+        assert_eq!((s.admin_bind_host.as_str(), s.admin_bind_port), ("127.0.0.1", 5001));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

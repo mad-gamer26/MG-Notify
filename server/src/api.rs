@@ -35,7 +35,7 @@ type Shared = State<Arc<AppState>>;
 pub struct ApiError(StatusCode, Value);
 
 impl ApiError {
-    fn new(status: u16, detail: impl Into<String>) -> Self {
+    pub(crate) fn new(status: u16, detail: impl Into<String>) -> Self {
         Self(StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Value::String(detail.into()))
     }
 
@@ -160,7 +160,7 @@ async fn require_verified_session(state: &AppState, headers: &HeaderMap) -> Resu
 
 /// Tells everything signed in to the account that `event` happened: open
 /// apps and websites over their event streams, closed apps by silent push.
-fn event_to_account(state: &AppState, account_id: &str, event: &'static str) {
+pub(crate) fn event_to_account(state: &AppState, account_id: &str, event: &'static str) {
     state.hub.account(account_id, event, json!({}));
     push::spawn_event_to_account(state.db.clone(), state.pusher.clone(), account_id, event);
 }
@@ -181,13 +181,13 @@ fn account_changed(state: &AppState, account_id: &str, push_event: Option<&'stat
     Ok(())
 }
 
-fn event_to_device(state: &AppState, device: Device, event: &'static str) {
+pub(crate) fn event_to_device(state: &AppState, device: Device, event: &'static str) {
     push::spawn_event(state.db.clone(), state.pusher.clone(), device, event);
 }
 
 /// Sends `event` to every device of the account, waiting until it's gone
 /// out: callers delete the devices right after.
-async fn event_to_account_now(state: &AppState, account_id: &str, event: &'static str) {
+pub(crate) async fn event_to_account_now(state: &AppState, account_id: &str, event: &'static str) {
     let devices = state.db.devices_for_account(account_id).unwrap_or_default();
     futures::future::join_all(devices.iter().map(|device| state.pusher.send_event(device, event))).await;
 }
@@ -203,7 +203,7 @@ async fn issue_verification_email(state: &AppState, account: &Account) -> Result
     })
 }
 
-fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
+pub(crate) fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
     let forwarded = headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
@@ -287,9 +287,16 @@ async fn logout(State(state): Shared, headers: HeaderMap) -> ApiResult {
 }
 
 /// GET /events: this session's realtime event stream (Server-Sent Events).
-async fn events(State(state): Shared, headers: HeaderMap) -> Result<Response, ApiError> {
+async fn events(State(state): Shared, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> Result<Response, ApiError> {
     let (account, session) = require_session(&state, &headers).await?;
-    Ok(state.hub.stream(account.json(), account.account_id.clone(), session.token_hash).into_response())
+    let info = crate::events::OpenStream {
+        account_id: account.account_id.clone(),
+        device_id: session.device_id.clone(),
+        address: client_ip(&headers, peer),
+        user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("").chars().take(200).collect(),
+        since: util::iso_now(),
+    };
+    Ok(state.hub.stream(account.json(), account.account_id.clone(), session.token_hash, info).into_response())
 }
 
 #[derive(Deserialize)]
@@ -377,7 +384,7 @@ struct ResetRequest {
 }
 
 /// Signs every device of the account out: after a password change or reset.
-async fn sign_out_everywhere(state: &AppState, account_id: &str) -> Result<(), ApiError> {
+pub(crate) async fn sign_out_everywhere(state: &AppState, account_id: &str) -> Result<(), ApiError> {
     event_to_account_now(state, account_id, "signed_out").await;
     state.db.delete_sessions_for_account(account_id)?;
     state.hub.signed_out_everywhere(account_id);
